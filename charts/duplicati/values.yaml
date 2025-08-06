@@ -88,15 +88,26 @@ persistence:
   source:
     enabled: false
     existingClaim: ""
-    accessMode: ""
-    size: ""
+    # Тип volume: pvc або hostPath
+    type: "hostPath"  # pvc або hostPath
+    # Для PVC
+    accessMode: "ReadWriteOnce"
+    size: "10Gi"
     storageClassName: ""
+    # Для hostPath
+    hostPath: "/mnt/data/source"
+    
   backups:
     enabled: false
     existingClaim: ""
-    accessMode: ""
-    size: ""
-    storageClassName: ""    
+    # Тип volume: pvc або hostPath
+    type: "hostPath"  # pvc або hostPath
+    # Для PVC
+    accessMode: "ReadWriteOnce"
+    size: "50Gi"
+    storageClassName: ""
+    # Для hostPath
+    hostPath: "/mnt/data/backups"
 
 nodeSelector: {}
 
