@@ -82,31 +82,37 @@ autoscaling:
 persistence:
   config:
     enabled: false
-    accessMode: ""
-    size: ""
+    # Volume type: "pvc" or "hostPath"
+    type: "pvc"
+    # For PVC
+    accessMode: "ReadWriteOnce"
+    size: "1Gi"
     storageClassName: ""
+    # For hostPath
+    hostPath: "/opt/duplicati/config"
+    
   source:
     enabled: false
     existingClaim: ""
-    # Тип volume: pvc або hostPath
-    type: "hostPath"  # pvc або hostPath
-    # Для PVC
+    # Volume type: "pvc" or "hostPath"
+    type: "pvc"
+    # For PVC
     accessMode: "ReadWriteOnce"
     size: "10Gi"
     storageClassName: ""
-    # Для hostPath
+    # For hostPath
     hostPath: "/mnt/data/source"
     
   backups:
     enabled: false
     existingClaim: ""
-    # Тип volume: pvc або hostPath
-    type: "hostPath"  # pvc або hostPath
-    # Для PVC
+    # Volume type: "pvc" or "hostPath"
+    type: "pvc"
+    # For PVC
     accessMode: "ReadWriteOnce"
     size: "50Gi"
     storageClassName: ""
-    # Для hostPath
+    # For hostPath
     hostPath: "/mnt/data/backups"
 
 nodeSelector: {}
