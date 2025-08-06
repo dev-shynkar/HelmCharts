@@ -8,7 +8,7 @@ image:
   repository: duplicati/duplicati
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "latest"
+  tag: ""
 
 imagePullSecrets: []
 nameOverride: "duplicati"
@@ -87,23 +87,16 @@ persistence:
     storageClassName: ""
   source:
     enabled: false
-    accessMode: ""
-    size: ""
-    storageClassName: ""    
-  backups:
-    enabled: false
-    accessMode: ""
-    size: ""
-    storageClassName: ""    
-  # Extra volume to add nfs shared folder  
-  # will be mounted at /nfs 
-  nfs:
-    enabled: false  
+    existingClaim: ""
     accessMode: ""
     size: ""
     storageClassName: ""
-    server: ""
-    path: ""    
+  backups:
+    enabled: false
+    existingClaim: ""
+    accessMode: ""
+    size: ""
+    storageClassName: ""    
 
 nodeSelector: {}
 
@@ -111,6 +104,13 @@ tolerations: []
 
 affinity: {}
 
-env:
-  - name: DUPLICATI__DISABLE_DB_ENCRYPTION
-    value: "true"
+envFromSecret:
+  secretName: duplicati-secret
+  passwordEnvName: DUPLICATI__WEBSERVICE_PASSWORD
+  passwordKey: DUPLICATI__WEBSERVICE_PASSWORD
+  hostnamesEnvName: DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES
+  hostnamesKey: DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES
+  encryptionKeyEnvName: SETTINGS_ENCRYPTION_KEY
+  encryptionKeyKey: SETTINGS_ENCRYPTION_KEY
+  timezoneEnvName: DUPLICATI__WEBSERVICE_TIMEZONE
+  timezoneKey: DUPLICATI__WEBSERVICE_TIMEZONE

@@ -1,0 +1,98 @@
+name: Publish Helm Charts
+
+on:
+  push:
+    branches: [ main, master ]
+    paths: 
+      - 'charts/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.13.0'
+
+      - name: Create packages directory
+        run: mkdir -p packages
+
+      - name: Package charts
+        run: |
+          echo "📦 Packaging charts from charts/ directory..."
+          for chart in charts/*/; do
+            if [ -f "$chart/Chart.yaml" ]; then
+              chart_name=$(basename "$chart")
+              echo "Packaging $chart_name..."
+              helm package "$chart" --destination packages/
+            fi
+          done
+
+      - name: Generate repository index
+        run: |
+          echo "📋 Generating repository index..."
+          helm repo index packages/ --url https://dev-shynkar.github.io/HelmCharts/
+          
+          echo "📝 Creating README..."
+          cat > packages/README.md << 'EOF'
+          # Dev-Shynkar Helm Charts Repository
+
+          ## 🚀 Додавання репозиторію
+
+          ```bash
+          helm repo add dev-shynkar https://dev-shynkar.github.io/HelmCharts/
+          helm repo update
+          ```
+
+          ## 🔍 Пошук чартів
+
+          ```bash
+          helm search repo dev-shynkar
+          ```
+
+          ## 📦 Встановлення Duplicati
+
+          ```bash
+          # Базове встановлення
+          helm install my-duplicati dev-shynkar/duplicati
+
+          # З налаштуваннями
+          helm install my-duplicati dev-shynkar/duplicati \
+            --set service.type=NodePort \
+            --set persistence.enabled=true
+          ```
+
+          ## 🔄 Оновлення
+
+          ```bash
+          helm upgrade my-duplicati dev-shynkar/duplicati
+          ```
+
+          ---
+          *Автоматично оновлюється через GitHub Actions*
+          EOF
+
+      - name: List packaged charts
+        run: |
+          echo "✅ Packaged charts:"
+          ls -la packages/
+          echo ""
+          echo "📋 Index content:"
+          cat packages/index.yaml
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./packages
+          commit_message: "📦 Update Helm repository [skip ci]"

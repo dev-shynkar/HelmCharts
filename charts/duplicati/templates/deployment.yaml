@@ -43,6 +43,32 @@ spec:
             - name: {{ .name }}
               value: {{ .value | quote }}
             {{- end }}
+
+            {{- with .Values.envFromSecret }}
+            - name: {{ .passwordEnvName | default "DUPLICATI__WEBSERVICE_PASSWORD" }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secretName }}
+                  key: {{ .passwordKey | default "DUPLICATI__WEBSERVICE_PASSWORD" }}
+
+            - name: {{ .hostnamesEnvName | default "DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES" }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secretName }}
+                  key: {{ .hostnamesKey | default "DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES" }}
+
+            - name: {{ .encryptionKeyEnvName | default "SETTINGS_ENCRYPTION_KEY" }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secretName }}
+                  key: {{ .encryptionKeyKey | default "SETTINGS_ENCRYPTION_KEY" }}
+
+            - name: {{ .timezoneEnvName | default "DUPLICATI__WEBSERVICE_TIMEZONE" }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secretName }}
+                  key: {{ .timezoneKey | default "DUPLICATI__WEBSERVICE_TIMEZONE" }}
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /
@@ -58,17 +84,13 @@ spec:
             - name: config
               mountPath: /config
             {{- end }}
-            {{- if .Values.persistence.source.enabled }}
+            {{- if or .Values.persistence.source.enabled .Values.persistence.source.existingClaim }}
             - name: source
               mountPath: /source
             {{- end }}
-            {{- if .Values.persistence.backups.enabled }}
+            {{- if or .Values.persistence.backups.enabled .Values.persistence.backups.existingClaim }}
             - name: backups
               mountPath: /backups
-            {{- end }}
-            {{- if .Values.persistence.nfs.enabled }}
-            - name: nfs
-              mountPath: /nfs
             {{- end }}
       volumes:
         {{- if .Values.persistence.config.enabled }}
@@ -76,20 +98,25 @@ spec:
           persistentVolumeClaim:
             claimName: pvc-duplicati-config
         {{- end }}
-        {{- if .Values.persistence.source.enabled }}
+
+        {{- if .Values.persistence.source.existingClaim }}
+        - name: source
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.source.existingClaim }}
+        {{- else if .Values.persistence.source.enabled }}
         - name: source
           persistentVolumeClaim:
             claimName: pvc-duplicati-source
         {{- end }}
-        {{- if .Values.persistence.backups.enabled }}
+
+        {{- if .Values.persistence.backups.existingClaim }}
+        - name: backups
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.backups.existingClaim }}
+        {{- else if .Values.persistence.backups.enabled }}
         - name: backups
           persistentVolumeClaim:
             claimName: pvc-duplicati-backups
-        {{- end }}
-        {{- if .Values.persistence.nfs.enabled }}
-        - name: nfs
-          persistentVolumeClaim:
-            claimName: pvc-duplicati-nfs
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

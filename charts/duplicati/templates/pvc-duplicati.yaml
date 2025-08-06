@@ -14,7 +14,7 @@ spec:
 ---
 {{- end }}
 
-{{- if .Values.persistence.source.enabled }}
+{{- if and .Values.persistence.source.enabled (not .Values.persistence.source.existingClaim) }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -30,7 +30,7 @@ spec:
 ---
 {{- end }}
 
-{{- if .Values.persistence.backups.enabled }}
+{{- if and .Values.persistence.backups.enabled (not .Values.persistence.backups.existingClaim) }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -44,34 +44,4 @@ spec:
       storage: {{ .Values.persistence.backups.size }}
   storageClassName: {{ .Values.persistence.backups.storageClassName }}
 ---
-{{- end }}
-
-{{- if .Values.persistence.nfs.enabled }}
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: pv-duplicati-nfs
-spec:
-  capacity:
-    storage: {{ .Values.persistence.nfs.size }}
-  accessModes:
-    - {{ .Values.persistence.nfs.accessMode }}
-  storageClassName: {{ .Values.persistence.nfs.storageClassName }}
-  nfs:
-    server: {{ .Values.persistence.nfs.server }}
-    path: {{ .Values.persistence.nfs.path }}
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: pvc-duplicati-nfs
-  namespace: {{ .Values.namespace }}
-spec:
-  accessModes:
-    - {{ .Values.persistence.nfs.accessMode }}
-  resources:
-    requests:
-      storage: {{ .Values.persistence.nfs.size }}
-  storageClassName: {{ .Values.persistence.nfs.storageClassName }}
-  volumeName: pv-duplicati-nfs
 {{- end }}
