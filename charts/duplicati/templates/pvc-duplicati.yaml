@@ -1,4 +1,4 @@
-{{- if .Values.persistence.config.enabled }}
+{{- if and .Values.persistence.config.enabled (ne .Values.persistence.config.type "hostPath") }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -13,8 +13,7 @@ spec:
   storageClassName: {{ .Values.persistence.config.storageClassName }}
 ---
 {{- end }}
-
-{{- if and .Values.persistence.source.enabled (not .Values.persistence.source.existingClaim) }}
+{{- if and .Values.persistence.source.enabled (not .Values.persistence.source.existingClaim) (ne .Values.persistence.source.type "hostPath") }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -29,8 +28,7 @@ spec:
   storageClassName: {{ .Values.persistence.source.storageClassName }}
 ---
 {{- end }}
-
-{{- if and .Values.persistence.backups.enabled (not .Values.persistence.backups.existingClaim) }}
+{{- if and .Values.persistence.backups.enabled (not .Values.persistence.backups.existingClaim) (ne .Values.persistence.backups.type "hostPath") }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
