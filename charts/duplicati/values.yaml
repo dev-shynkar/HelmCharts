@@ -102,6 +102,7 @@ persistence:
     storageClassName: ""
     # For hostPath
     hostPath: "/mnt/data/source"
+    readOnly: true
     
   backups:
     enabled: false

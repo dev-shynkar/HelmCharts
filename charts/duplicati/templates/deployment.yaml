@@ -87,6 +87,7 @@ spec:
             {{- if or .Values.persistence.source.enabled .Values.persistence.source.existingClaim (eq .Values.persistence.source.type "hostPath") }}
             - name: source
               mountPath: /source
+              readOnly: {{ .Values.persistence.source.readOnly | default false }}
             {{- end }}
             {{- if or .Values.persistence.backups.enabled .Values.persistence.backups.existingClaim (eq .Values.persistence.backups.type "hostPath") }}
             - name: backups
