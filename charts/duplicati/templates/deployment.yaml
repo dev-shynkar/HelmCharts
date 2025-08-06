@@ -43,31 +43,45 @@ spec:
             - name: {{ .name }}
               value: {{ .value | quote }}
             {{- end }}
-
+            {{- range .Values.envFrom }}
+            {{- if .secretRef }}
+            - name: {{ .name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secretRef.name }}
+                  key: {{ .secretRef.key }}
+            {{- end }}
+            {{- if .configMapRef }}
+            - name: {{ .name }}
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .configMapRef.name }}
+                  key: {{ .configMapRef.key }}
+            {{- end }}
+            {{- end }}
             {{- with .Values.envFromSecret }}
+            {{- if .secretName }}
             - name: {{ .passwordEnvName | default "DUPLICATI__WEBSERVICE_PASSWORD" }}
               valueFrom:
                 secretKeyRef:
                   name: {{ .secretName }}
                   key: {{ .passwordKey | default "DUPLICATI__WEBSERVICE_PASSWORD" }}
-
             - name: {{ .hostnamesEnvName | default "DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES" }}
               valueFrom:
                 secretKeyRef:
                   name: {{ .secretName }}
                   key: {{ .hostnamesKey | default "DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES" }}
-
             - name: {{ .encryptionKeyEnvName | default "SETTINGS_ENCRYPTION_KEY" }}
               valueFrom:
                 secretKeyRef:
                   name: {{ .secretName }}
                   key: {{ .encryptionKeyKey | default "SETTINGS_ENCRYPTION_KEY" }}
-
             - name: {{ .timezoneEnvName | default "DUPLICATI__WEBSERVICE_TIMEZONE" }}
               valueFrom:
                 secretKeyRef:
                   name: {{ .secretName }}
                   key: {{ .timezoneKey | default "DUPLICATI__WEBSERVICE_TIMEZONE" }}
+            {{- end }}
             {{- end }}
           livenessProbe:
             httpGet:
@@ -80,68 +94,68 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
-              {{- if .Values.persistence.config.enabled }}
-              - name: config
-                mountPath: /data
-              {{- end }}
-              {{- if or .Values.persistence.source.enabled .Values.persistence.source.existingClaim (eq .Values.persistence.source.type "hostPath") }}
-              - name: source
-                mountPath: /source
-                readOnly: {{ .Values.persistence.source.readOnly | default false }}
-              {{- end }}
-              {{- if or .Values.persistence.backups.enabled .Values.persistence.backups.existingClaim (eq .Values.persistence.backups.type "hostPath") }}
-              - name: backups
-                mountPath: /backups
-                readOnly: {{ .Values.persistence.backups.readOnly | default false }}
-              {{- end }}
-        volumes:
-          {{- /* Config volume - завжди PVC */ -}}
-          {{- if .Values.persistence.config.enabled }}
-          - name: config
-            persistentVolumeClaim:
-              claimName: pvc-duplicati-config
-          {{- end }}
+            {{- if .Values.persistence.config.enabled }}
+            - name: config
+              mountPath: /data
+            {{- end }}
+            {{- if or .Values.persistence.source.enabled .Values.persistence.source.existingClaim (eq .Values.persistence.source.type "hostPath") }}
+            - name: source
+              mountPath: /source
+              readOnly: {{ .Values.persistence.source.readOnly | default false }}
+            {{- end }}
+            {{- if or .Values.persistence.backups.enabled .Values.persistence.backups.existingClaim (eq .Values.persistence.backups.type "hostPath") }}
+            - name: backups
+              mountPath: /backups
+              readOnly: {{ .Values.persistence.backups.readOnly | default false }}
+            {{- end }}
+      volumes:
+        {{- /* Config volume - завжди PVC */ -}}
+        {{- if .Values.persistence.config.enabled }}
+        - name: config
+          persistentVolumeClaim:
+            claimName: pvc-duplicati-config
+        {{- end }}
 
-          {{- /* Source volume */ -}}
-          {{- if .Values.persistence.source.existingClaim }}
-          - name: source
-            persistentVolumeClaim:
-              claimName: {{ .Values.persistence.source.existingClaim }}
-          {{- else if eq .Values.persistence.source.type "hostPath" }}
-          - name: source
-            hostPath:
-              path: {{ .Values.persistence.source.hostPath }}
-              type: DirectoryOrCreate
-          {{- else if .Values.persistence.source.enabled }}
-          - name: source
-            persistentVolumeClaim:
-              claimName: pvc-duplicati-source
-          {{- end }}
+        {{- /* Source volume */ -}}
+        {{- if .Values.persistence.source.existingClaim }}
+        - name: source
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.source.existingClaim }}
+        {{- else if eq .Values.persistence.source.type "hostPath" }}
+        - name: source
+          hostPath:
+            path: {{ .Values.persistence.source.hostPath }}
+            type: DirectoryOrCreate
+        {{- else if .Values.persistence.source.enabled }}
+        - name: source
+          persistentVolumeClaim:
+            claimName: pvc-duplicati-source
+        {{- end }}
 
-          {{- /* Backups volume */ -}}
-          {{- if .Values.persistence.backups.existingClaim }}
-          - name: backups
-            persistentVolumeClaim:
-              claimName: {{ .Values.persistence.backups.existingClaim }}
-          {{- else if eq .Values.persistence.backups.type "hostPath" }}
-          - name: backups
-            hostPath:
-              path: {{ .Values.persistence.backups.hostPath }}
-              type: DirectoryOrCreate
-          {{- else if .Values.persistence.backups.enabled }}
-          - name: backups
-            persistentVolumeClaim:
-              claimName: pvc-duplicati-backups
-          {{- end }}
-        {{- with .Values.nodeSelector }}
-        nodeSelector:
-          {{- toYaml . | nindent 8 }}
+        {{- /* Backups volume */ -}}
+        {{- if .Values.persistence.backups.existingClaim }}
+        - name: backups
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.backups.existingClaim }}
+        {{- else if eq .Values.persistence.backups.type "hostPath" }}
+        - name: backups
+          hostPath:
+            path: {{ .Values.persistence.backups.hostPath }}
+            type: DirectoryOrCreate
+        {{- else if .Values.persistence.backups.enabled }}
+        - name: backups
+          persistentVolumeClaim:
+            claimName: pvc-duplicati-backups
         {{- end }}
-        {{- with .Values.affinity }}
-        affinity:
-          {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.tolerations }}
-        tolerations:
-          {{- toYaml . | nindent 8 }}
-        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
