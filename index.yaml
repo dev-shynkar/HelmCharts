@@ -1,0 +1,18 @@
+apiVersion: v1
+entries:
+  duplicati:
+  - apiVersion: v2
+    appVersion: 2.1.0.125
+    created: "2025-08-06T11:02:58.273201332Z"
+    description: A Helm chart for duplicati
+    digest: cc88d61362fe318ab7ee730d291bb4da23d9112f6f60a90a40ff2548710b879c
+    home: https://github.com/dev-shynkar/HelmCharts/tree/master/duplicati
+    icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
+    name: duplicati
+    sources:
+    - https://github.com/duplicati/duplicati
+    type: application
+    urls:
+    - https://dev-shynkar.github.io/HelmCharts/duplicati-0.6.0.tgz
+    version: 0.6.0
+generated: "2025-08-06T11:02:58.272412782Z"
