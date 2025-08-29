@@ -5,6 +5,6 @@ home: https://github.com/dev-shynkar/HelmCharts/tree/master/duplicati
 icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
 name: duplicati
 sources:
-- https://github.com/duplicati/duplicati
+- https://hub.docker.com/r/linuxserver/transmission
 type: application
 version: 0.11.0

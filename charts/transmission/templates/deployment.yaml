@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "transmission.fullname" . }}
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "transmission.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "transmission.name" . }}
+    spec:
+      containers:
+        - name: transmission
+          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 9091
+          env:
+            - name: PUID
+              value: "{{ .Values.env.PUID }}"
+            - name: PGID
+              value: "{{ .Values.env.PGID }}"
+            - name: TZ
+              value: "{{ .Values.env.TZ }}"
+            - name: TRANSMISSION_USERNAME
+              value: "{{ .Values.env.TRANSMISSION_USERNAME }}"
+            - name: TRANSMISSION_PASSWORD
+              value: "{{ .Values.env.TRANSMISSION_PASSWORD }}"
+            - name: TRANSMISSION_RPC_AUTHENTICATION_REQUIRED
+              value: "{{ .Values.env.TRANSMISSION_RPC_AUTHENTICATION_REQUIRED }}"
+          volumeMounts:
+            {{- if .Values.persistence.config.enabled }}
+            - name: config
+              mountPath: /config
+            {{- end }}
+            {{- if .Values.persistence.downloads.enabled }}
+            - name: downloads
+              mountPath: /downloads
+            {{- end }}
+      volumes:
+        {{- if .Values.persistence.config.enabled }}
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ include "transmission.fullname" . }}-config
+        {{- end }}
+        {{- if .Values.persistence.downloads.enabled }}
+          {{- if eq .Values.persistence.downloads.type "hostPath" }}
+        - name: downloads
+          hostPath:
+            path: {{ .Values.persistence.downloads.hostPath }}
+            type: DirectoryOrCreate
+          {{- else }}
+        - name: downloads
+          persistentVolumeClaim:
+            claimName: {{ include "transmission.fullname" . }}-downloads
+          {{- end }}
+        {{- end }}

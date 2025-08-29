@@ -1,0 +1,10 @@
+.DS_Store
+.git
+.gitignore
+.bzr
+.hg
+.svn
+CVS
+*.tgz
+*.bak
+*.tmp

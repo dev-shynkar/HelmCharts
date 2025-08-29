@@ -1,0 +1,35 @@
+{{- if .Values.persistence.config.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "transmission.fullname" . }}-config
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.persistence.config.storageClassName }}
+  storageClassName: {{ .Values.persistence.config.storageClassName }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.config.size }}
+---
+{{- end }}
+
+{{- if and .Values.persistence.downloads.enabled (ne .Values.persistence.downloads.type "hostPath") }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "transmission.fullname" . }}-downloads
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.persistence.downloads.storageClassName }}
+  storageClassName: {{ .Values.persistence.downloads.storageClassName }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.downloads.size | default "10Gi" }}
+---
+{{- end }}
