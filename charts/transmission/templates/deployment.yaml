@@ -26,12 +26,6 @@ spec:
               value: "{{ .Values.env.PGID }}"
             - name: TZ
               value: "{{ .Values.env.TZ }}"
-            - name: TRANSMISSION_USERNAME
-              value: "{{ .Values.env.TRANSMISSION_USERNAME }}"
-            - name: TRANSMISSION_PASSWORD
-              value: "{{ .Values.env.TRANSMISSION_PASSWORD }}"
-            - name: TRANSMISSION_RPC_AUTHENTICATION_REQUIRED
-              value: "{{ .Values.env.TRANSMISSION_RPC_AUTHENTICATION_REQUIRED }}"
           volumeMounts:
             {{- if .Values.persistence.config.enabled }}
             - name: config

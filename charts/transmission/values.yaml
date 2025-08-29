@@ -47,12 +47,12 @@ affinity: {}
 
 persistence:
   config:
-    enabled: true
+    enabled: false
     storageClassName: ""
     size: "1Gi"
 
   downloads:
-    enabled: true
+    enabled: false
     type: "hostPath"
     hostPath: "/media/k3s-data"
 
@@ -60,7 +60,3 @@ env:
   PUID: "1000"
   PGID: "1000"
   TZ: "Europe/Kyiv"
-  # Transmission config options (https://github.com/linuxserver/docker-transmission#parameters)
-  TRANSMISSION_USERNAME: "admin"
-  TRANSMISSION_PASSWORD: "password"
-  TRANSMISSION_RPC_AUTHENTICATION_REQUIRED: "true"
