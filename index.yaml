@@ -3,9 +3,9 @@ entries:
   duplicati:
   - apiVersion: v2
     appVersion: 2.1.0.125
-    created: "2025-08-29T19:25:33.881189185Z"
+    created: "2025-09-02T09:50:11.973650663Z"
     description: A Helm chart for duplicati
-    digest: 38dfab365b91d9fc15cf67d3332c5d030fc0de8e395858c21c4609f41530f186
+    digest: a013267f34bc40c1a553fb6e56708b44527ea84a76d23ec4767138ac655b04f3
     home: https://github.com/dev-shynkar/HelmCharts/tree/master/duplicati
     icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
     name: duplicati
@@ -18,12 +18,12 @@ entries:
   transmission:
   - apiVersion: v2
     appVersion: 4.0.6
-    created: "2025-08-29T19:25:33.881495858Z"
+    created: "2025-09-02T09:50:11.973963507Z"
     description: Transmission torrent client - linuxserver.io image
-    digest: a66653916ec033cb5f143c08419a0e5add90634369ed257e905ec4b9290ddb1f
+    digest: 658470af701d231e2ed24d9dd4d84def6fe6415d9bf1abea1866470af906bf79
     name: transmission
     type: application
     urls:
-    - https://dev-shynkar.github.io/HelmCharts/transmission-0.2.0.tgz
-    version: 0.2.0
-generated: "2025-08-29T19:25:33.880460063Z"
+    - https://dev-shynkar.github.io/HelmCharts/transmission-0.3.0.tgz
+    version: 0.3.0
+generated: "2025-09-02T09:50:11.972923275Z"
