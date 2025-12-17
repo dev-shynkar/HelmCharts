@@ -1,0 +1,6 @@
+apiVersion: v2
+name: go-ecoflow-exporter
+description: Prometheus exporter for EcoFlow devices (remote mode)
+type: application
+version: 0.1.0
+appVersion: "1.5.0"

@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "go-ecoflow-exporter.fullname" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "go-ecoflow-exporter.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "go-ecoflow-exporter.name" . }}
+    spec:
+      containers:
+        - name: exporter
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 2112
+
+          env:
+            - name: EXPORTER_TYPE
+              value: {{ .Values.exporter.type | quote }}
+
+            {{- if .Values.exporter.devices }}
+            - name: ECOFLOW_DEVICES
+              value: {{ .Values.exporter.devices | quote }}
+            {{- end }}
+
+            {{- if .Values.exporter.devicesPrettyNames }}
+            - name: ECOFLOW_DEVICES_PRETTY_NAMES
+              value: {{ .Values.exporter.devicesPrettyNames | quote }}
+            {{- end }}
+
+            - name: MQTT_DEVICE_OFFLINE_THRESHOLD_SECONDS
+              value: {{ .Values.exporter.mqtt.deviceOfflineThresholdSeconds | quote }}
+
+            # REST mode
+            - name: ECOFLOW_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "go-ecoflow-exporter.fullname" . }}
+                  key: ECOFLOW_ACCESS_KEY
+
+            - name: ECOFLOW_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "go-ecoflow-exporter.fullname" . }}
+                  key: ECOFLOW_SECRET_KEY
+
+            # MQTT mode
+            - name: ECOFLOW_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "go-ecoflow-exporter.fullname" . }}
+                  key: ECOFLOW_EMAIL
+
+            - name: ECOFLOW_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "go-ecoflow-exporter.fullname" . }}
+                  key: ECOFLOW_PASSWORD
+
+          resources:
+{{ toYaml .Values.resources | indent 12 }}

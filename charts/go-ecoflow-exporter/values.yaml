@@ -1,0 +1,37 @@
+replicaCount: 1
+
+image:
+  repository: tess1o/go-ecoflow-exporter
+  pullPolicy: IfNotPresent
+  tag: latest
+
+service:
+  type: ClusterIP
+  port: 2112
+
+env:
+  region: EU
+  mode: remote
+
+exporter:
+  type: rest        # rest | mqtt
+
+  devices: ""       # "SN1,SN2,SN3"
+  devicesPrettyNames: "" # '{"SN1":"My EcoFlow"}'
+
+  mqtt:
+    deviceOfflineThresholdSeconds: 30
+
+credentials:
+  # REST mode
+  accessKey: ""
+  secretKey: ""
+
+  # MQTT mode
+  email: ""
+  password: ""
+
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
