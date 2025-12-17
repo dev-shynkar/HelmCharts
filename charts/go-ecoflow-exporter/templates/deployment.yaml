@@ -16,18 +16,20 @@ spec:
         - name: exporter
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+
           ports:
-            - containerPort: 2112
+            - name: metrics
+              containerPort: 2112
+              protocol: TCP
 
           env:
             - name: PROMETHEUS_ENABLED
-                value: {{ .Values.prometheus.enabled | quote }}
+              value: {{ .Values.prometheus.enabled | quote }}
 
             - name: EXPORTER_TYPE
               value: {{ .Values.exporter.type | quote }}
 
             {{- if .Values.exporter.devices }}
-            
             - name: ECOFLOW_DEVICES
               value: {{ .Values.exporter.devices | quote }}
             {{- end }}
@@ -40,7 +42,7 @@ spec:
             - name: MQTT_DEVICE_OFFLINE_THRESHOLD_SECONDS
               value: {{ .Values.exporter.mqtt.deviceOfflineThresholdSeconds | quote }}
 
-            # REST mode
+            # REST mode credentials
             - name: ECOFLOW_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
@@ -53,7 +55,7 @@ spec:
                   name: {{ include "go-ecoflow-exporter.fullname" . }}
                   key: ECOFLOW_SECRET_KEY
 
-            # MQTT mode
+            # MQTT mode credentials
             - name: ECOFLOW_EMAIL
               valueFrom:
                 secretKeyRef:
