@@ -20,10 +20,14 @@ spec:
             - containerPort: 2112
 
           env:
+            - name: PROMETHEUS_ENABLED
+                value: {{ .Values.prometheus.enabled | quote }}
+
             - name: EXPORTER_TYPE
               value: {{ .Values.exporter.type | quote }}
 
             {{- if .Values.exporter.devices }}
+            
             - name: ECOFLOW_DEVICES
               value: {{ .Values.exporter.devices | quote }}
             {{- end }}

@@ -31,6 +31,9 @@ credentials:
   email: ""
   password: ""
 
+prometheus:
+  enabled: true
+
 resources: {}
 nodeSelector: {}
 tolerations: []
