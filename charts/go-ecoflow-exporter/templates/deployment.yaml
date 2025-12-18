@@ -23,6 +23,7 @@ spec:
               protocol: TCP
 
           env:
+            # --- common ---
             - name: PROMETHEUS_ENABLED
               value: {{ .Values.prometheus.enabled | quote }}
 
@@ -42,7 +43,8 @@ spec:
             - name: MQTT_DEVICE_OFFLINE_THRESHOLD_SECONDS
               value: {{ .Values.exporter.mqtt.deviceOfflineThresholdSeconds | quote }}
 
-            # REST mode credentials
+            # --- REST MODE ---
+            {{- if eq .Values.exporter.type "rest" }}
             - name: ECOFLOW_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
@@ -54,8 +56,10 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.existingSecret.name }}
                   key: ECOFLOW_SECRET_KEY
+            {{- end }}
 
-            # MQTT mode credentials
+            # --- MQTT MODE ---
+            {{- if eq .Values.exporter.type "mqtt" }}
             - name: ECOFLOW_EMAIL
               valueFrom:
                 secretKeyRef:
@@ -67,6 +71,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.existingSecret.name }}
                   key: ECOFLOW_PASSWORD
+            {{- end }}
 
           resources:
 {{ toYaml .Values.resources | indent 12 }}
