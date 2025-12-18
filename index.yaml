@@ -3,9 +3,9 @@ entries:
   duplicati:
   - apiVersion: v2
     appVersion: 2.2.0.1
-    created: "2025-12-17T20:37:05.041775908Z"
+    created: "2025-12-18T09:02:10.098329526Z"
     description: A Helm chart for duplicati
-    digest: 57001556cb1d89b67fe77a772fe6a0d98dc505722eec92e4ccb90496beb99cfa
+    digest: 8f4c4ffd95ab1c2deaefc002d42fbb21627cdc99d9298b89abe56eeacffefd38
     home: https://github.com/dev-shynkar/HelmCharts/tree/master/duplicati
     icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
     name: duplicati
@@ -18,23 +18,23 @@ entries:
   go-ecoflow-exporter:
   - apiVersion: v2
     appVersion: 1.5.0
-    created: "2025-12-17T20:37:05.042007465Z"
+    created: "2025-12-18T09:02:10.098549479Z"
     description: Prometheus exporter for EcoFlow devices (remote mode)
-    digest: e7aa83f7f3762aaab9b13fad49825fa4e0397e1c1678c8e524eaa6e257ac5373
+    digest: 896e34417b15b606e64e7f717455baa9fddbfc51544cab6d670ea92092d6c594
     name: go-ecoflow-exporter
     type: application
     urls:
-    - https://dev-shynkar.github.io/HelmCharts/go-ecoflow-exporter-0.3.0.tgz
-    version: 0.3.0
+    - https://dev-shynkar.github.io/HelmCharts/go-ecoflow-exporter-0.4.0.tgz
+    version: 0.4.0
   transmission:
   - apiVersion: v2
     appVersion: 4.0.6
-    created: "2025-12-17T20:37:05.042260755Z"
+    created: "2025-12-18T09:02:10.098835084Z"
     description: Transmission torrent client - linuxserver.io image
-    digest: 649e2bdb7701dfb917dc2ec64210cfca981f494ba545febe21d711cafe50df9a
+    digest: 752c506d46bedeab9320758c1047389906c0a50762ac756b8a63d77e104848af
     name: transmission
     type: application
     urls:
     - https://dev-shynkar.github.io/HelmCharts/transmission-0.3.0.tgz
     version: 0.3.0
-generated: "2025-12-17T20:37:05.041104659Z"
+generated: "2025-12-18T09:02:10.097442703Z"
