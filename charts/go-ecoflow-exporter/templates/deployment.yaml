@@ -1,7 +1,11 @@
+{{- include "go-ecoflow-exporter.validate" . }}
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "go-ecoflow-exporter.fullname" . }}
+  labels:
+    app: {{ include "go-ecoflow-exporter.name" . }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -23,13 +27,22 @@ spec:
               protocol: TCP
 
           env:
-            # --- common ---
+            # ------------------
+            # Common
+            # ------------------
             - name: PROMETHEUS_ENABLED
               value: {{ .Values.prometheus.enabled | quote }}
 
             - name: EXPORTER_TYPE
               value: {{ .Values.exporter.type | quote }}
 
+            - name: MQTT_DEVICE_OFFLINE_THRESHOLD_SECONDS
+              value: {{ .Values.exporter.mqtt.deviceOfflineThresholdSeconds | quote }}
+
+            # ------------------
+            # MQTT devices
+            # ------------------
+            {{- if eq .Values.exporter.type "mqtt" }}
             {{- if .Values.exporter.devices }}
             - name: ECOFLOW_DEVICES
               value: {{ .Values.exporter.devices | quote }}
@@ -39,11 +52,11 @@ spec:
             - name: ECOFLOW_DEVICES_PRETTY_NAMES
               value: {{ .Values.exporter.devicesPrettyNames | quote }}
             {{- end }}
+            {{- end }}
 
-            - name: MQTT_DEVICE_OFFLINE_THRESHOLD_SECONDS
-              value: {{ .Values.exporter.mqtt.deviceOfflineThresholdSeconds | quote }}
-
-            # --- REST MODE ---
+            # ------------------
+            # REST credentials
+            # ------------------
             {{- if eq .Values.exporter.type "rest" }}
             - name: ECOFLOW_ACCESS_KEY
               valueFrom:
@@ -58,7 +71,9 @@ spec:
                   key: ECOFLOW_SECRET_KEY
             {{- end }}
 
-            # --- MQTT MODE ---
+            # ------------------
+            # MQTT credentials
+            # ------------------
             {{- if eq .Values.exporter.type "mqtt" }}
             - name: ECOFLOW_EMAIL
               valueFrom:
