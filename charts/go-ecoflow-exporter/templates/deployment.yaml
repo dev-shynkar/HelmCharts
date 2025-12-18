@@ -46,26 +46,26 @@ spec:
             - name: ECOFLOW_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "go-ecoflow-exporter.fullname" . }}
+                  name: {{ .Values.existingSecret.name }}
                   key: ECOFLOW_ACCESS_KEY
 
             - name: ECOFLOW_SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "go-ecoflow-exporter.fullname" . }}
+                  name: {{ .Values.existingSecret.name }}
                   key: ECOFLOW_SECRET_KEY
 
             # MQTT mode credentials
             - name: ECOFLOW_EMAIL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "go-ecoflow-exporter.fullname" . }}
+                  name: {{ .Values.existingSecret.name }}
                   key: ECOFLOW_EMAIL
 
             - name: ECOFLOW_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "go-ecoflow-exporter.fullname" . }}
+                  name: {{ .Values.existingSecret.name }}
                   key: ECOFLOW_PASSWORD
 
           resources:
