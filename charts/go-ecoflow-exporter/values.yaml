@@ -25,6 +25,9 @@ existingSecret:
 prometheus:
   enabled: true
 
+debug:
+  enabled: false
+
 resources: {}
 nodeSelector: {}
 tolerations: []

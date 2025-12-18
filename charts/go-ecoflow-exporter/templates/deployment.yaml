@@ -39,6 +39,9 @@ spec:
             - name: MQTT_DEVICE_OFFLINE_THRESHOLD_SECONDS
               value: {{ .Values.exporter.mqtt.deviceOfflineThresholdSeconds | quote }}
 
+            - name: DEBUG
+              value: {{ .Values.debug.enabled | quote }}
+
             # ------------------
             # REST credentials
             # ------------------
