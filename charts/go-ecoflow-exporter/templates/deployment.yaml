@@ -40,21 +40,6 @@ spec:
               value: {{ .Values.exporter.mqtt.deviceOfflineThresholdSeconds | quote }}
 
             # ------------------
-            # MQTT devices
-            # ------------------
-            {{- if eq .Values.exporter.type "mqtt" }}
-            {{- if .Values.exporter.devices }}
-            - name: ECOFLOW_DEVICES
-              value: {{ .Values.exporter.devices | quote }}
-            {{- end }}
-
-            {{- if .Values.exporter.devicesPrettyNames }}
-            - name: ECOFLOW_DEVICES_PRETTY_NAMES
-              value: {{ .Values.exporter.devicesPrettyNames | quote }}
-            {{- end }}
-            {{- end }}
-
-            # ------------------
             # REST credentials
             # ------------------
             {{- if eq .Values.exporter.type "rest" }}
@@ -72,7 +57,7 @@ spec:
             {{- end }}
 
             # ------------------
-            # MQTT credentials
+            # MQTT credentials + devices
             # ------------------
             {{- if eq .Values.exporter.type "mqtt" }}
             - name: ECOFLOW_EMAIL
@@ -86,6 +71,20 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.existingSecret.name }}
                   key: ECOFLOW_PASSWORD
+
+            - name: ECOFLOW_DEVICES
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecret.name }}
+                  key: ECOFLOW_DEVICES
+                  optional: true
+
+            - name: ECOFLOW_DEVICES_PRETTY_NAMES
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecret.name }}
+                  key: ECOFLOW_DEVICES_PRETTY_NAMES
+                  optional: true
             {{- end }}
 
           resources:
