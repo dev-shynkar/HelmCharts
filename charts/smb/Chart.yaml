@@ -2,5 +2,5 @@ apiVersion: v2
 name: samba
 description: Helm chart for Samba SMB server using crazymax/samba
 type: application
-version: 0.2.0
+version: 0.3.0
 appVersion: "4.21.4"

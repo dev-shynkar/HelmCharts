@@ -97,26 +97,15 @@ spec:
               subPath: config.yml
             - name: data
               mountPath: {{ .Values.persistence.mountPath }}
-            - name: secrets
-              mountPath: /run/secrets
-              readOnly: true
 
-          resources:
-{{ toYaml .Values.resources | indent 12 }}
-
-      volumes:
-        - name: config
-          configMap:
-            name: {{ include "samba.fullname" . }}-config
-
-        - name: data
-{{- if .Values.persistence.enabled }}
-          persistentVolumeClaim:
-            claimName: {{ include "samba.fullname" . }}-data
-{{- else }}
-          emptyDir: {}
-{{- end }}
-
-        - name: secrets
-          secret:
-            secretName: {{ .Values.secretName | default "samba-users" }}
+          volumes:
+            - name: config
+              configMap:
+                name: {{ include "samba.fullname" . }}-config
+            - name: data
+          {{- if .Values.persistence.enabled }}
+              persistentVolumeClaim:
+                claimName: {{ include "samba.fullname" . }}-data
+          {{- else }}
+              emptyDir: {}
+          {{- end }}
