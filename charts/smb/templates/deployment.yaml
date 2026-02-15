@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "samba.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "samba.name" . }}
+    helm.sh/chart: {{ include "samba.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "samba.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "samba.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+{{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+{{- end }}
+
+      containers:
+        - name: samba
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          ports:
+{{- if .Values.service.ports.smb.enabled }}
+            - name: smb-tcp
+              containerPort: {{ .Values.service.ports.smb.port }}
+              protocol: TCP
+{{- end }}
+
+          env:
+            - name: TZ
+              value: "{{ .Values.env.TZ }}"
+            - name: CONFIG_FILE
+              value: "{{ .Values.env.CONFIG_FILE }}"
+            - name: SAMBA_WORKGROUP
+              value: "{{ .Values.env.SAMBA_WORKGROUP }}"
+            - name: SAMBA_SERVER_STRING
+              value: "{{ .Values.env.SAMBA_SERVER_STRING }}"
+            - name: SAMBA_LOG_LEVEL
+              value: "{{ .Values.env.SAMBA_LOG_LEVEL }}"
+            - name: SAMBA_FOLLOW_SYMLINKS
+              value: "{{ .Values.env.SAMBA_FOLLOW_SYMLINKS }}"
+            - name: SAMBA_WIDE_LINKS
+              value: "{{ .Values.env.SAMBA_WIDE_LINKS }}"
+            - name: SAMBA_HOSTS_ALLOW
+              value: "{{ .Values.env.SAMBA_HOSTS_ALLOW }}"
+            - name: SAMBA_INTERFACES
+              value: "{{ .Values.env.SAMBA_INTERFACES }}"
+            - name: WSDD2_ENABLE
+              value: "{{ .Values.env.WSDD2_ENABLE }}"
+            - name: WSDD2_HOSTNAME
+              value: "{{ .Values.env.WSDD2_HOSTNAME }}"
+            - name: WSDD2_NETBIOS_NAME
+              value: "{{ .Values.env.WSDD2_NETBIOS_NAME }}"
+            - name: WSDD2_INTERFACE
+              value: "{{ .Values.env.WSDD2_INTERFACE }}"
+
+          securityContext:
+{{ toYaml .Values.securityContext | indent 12 }}
+
+          volumeMounts:
+            - name: config
+              mountPath: /data/config.yml
+              subPath: config.yml
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath }}
+
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "samba.fullname" . }}-config
+
+        - name: data
+{{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "samba.fullname" . }}-data
+{{- else }}
+          emptyDir: {}
+{{- end }}

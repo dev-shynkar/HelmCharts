@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "samba.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "samba.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app.kubernetes.io/name: {{ include "samba.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+
+{{- if .Values.service.ports.smb.enabled }}
+    - name: smb-tcp
+      port: {{ .Values.service.ports.smb.port }}
+      targetPort: {{ .Values.service.ports.smb.port }}
+      protocol: TCP
+{{- end }}
+
+{{- if .Values.service.ports.wsdd.enabled }}
+    - name: wsdd-tcp
+      port: {{ .Values.service.ports.wsdd.port }}
+      targetPort: {{ .Values.service.ports.wsdd.port }}
+      protocol: TCP
+    - name: wsdd-udp
+      port: {{ .Values.service.ports.wsdd.port }}
+      targetPort: {{ .Values.service.ports.wsdd.port }}
+      protocol: UDP
+{{- end }}
+
+{{- if .Values.service.ports.llmnr.enabled }}
+    - name: llmnr-tcp
+      port: {{ .Values.service.ports.llmnr.port }}
+      targetPort: {{ .Values.service.ports.llmnr.port }}
+      protocol: TCP
+    - name: llmnr-udp
+      port: {{ .Values.service.ports.llmnr.port }}
+      targetPort: {{ .Values.service.ports.llmnr.port }}
+      protocol: UDP
+{{- end }}

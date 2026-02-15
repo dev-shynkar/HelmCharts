@@ -1,0 +1,54 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/crazy-max/samba
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: LoadBalancer
+
+  ports:
+    smb:
+      enabled: true
+      port: 445
+
+    wsdd:
+      enabled: false
+      port: 3702
+
+    llmnr:
+      enabled: false
+      port: 5355
+
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: ""
+  mountPath: /data
+
+env:
+  TZ: Europe/Kyiv
+  CONFIG_FILE: /data/config.yml
+  SAMBA_WORKGROUP: WORKGROUP
+  SAMBA_SERVER_STRING: K8s Samba Server
+  SAMBA_LOG_LEVEL: "0"
+  SAMBA_FOLLOW_SYMLINKS: "no"
+  SAMBA_WIDE_LINKS: "no"
+  SAMBA_HOSTS_ALLOW: "192.168.1.0/24"
+  SAMBA_INTERFACES: ""
+  WSDD2_ENABLE: "0"
+  WSDD2_HOSTNAME: ""
+  WSDD2_NETBIOS_NAME: ""
+  WSDD2_INTERFACE: ""
+
+resources: {}
+
+securityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
