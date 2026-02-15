@@ -43,6 +43,22 @@ spec:
               containerPort: {{ .Values.service.ports.smb.port }}
               protocol: TCP
 {{- end }}
+{{- if .Values.service.ports.wsdd.enabled }}
+            - name: wsdd-tcp
+              containerPort: {{ .Values.service.ports.wsdd.port }}
+              protocol: TCP
+            - name: wsdd-udp
+              containerPort: {{ .Values.service.ports.wsdd.port }}
+              protocol: UDP
+{{- end }}
+{{- if .Values.service.ports.llmnr.enabled }}
+            - name: llmnr-tcp
+              containerPort: {{ .Values.service.ports.llmnr.port }}
+              protocol: TCP
+            - name: llmnr-udp
+              containerPort: {{ .Values.service.ports.llmnr.port }}
+              protocol: UDP
+{{- end }}
 
           env:
             - name: TZ
@@ -81,6 +97,9 @@ spec:
               subPath: config.yml
             - name: data
               mountPath: {{ .Values.persistence.mountPath }}
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
 
           resources:
 {{ toYaml .Values.resources | indent 12 }}
@@ -97,3 +116,7 @@ spec:
 {{- else }}
           emptyDir: {}
 {{- end }}
+
+        - name: secrets
+          secret:
+            secretName: {{ .Values.secretName | default "samba-users" }}

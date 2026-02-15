@@ -4,4 +4,4 @@ metadata:
   name: {{ include "samba.fullname" . }}-config
 data:
   config.yml: |-
-{{ .Values.configYAML | default "auth:\n  - user: sambauser\n    password: changeme\nshare:\n  - name: data\n    path: /data\n    browsable: yes\n    readonly: no\n    guestok: no\n    validusers: sambauser" | indent 4 }}
+{{ .Values.configYAML | indent 4 }}
