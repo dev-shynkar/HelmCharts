@@ -31,6 +31,7 @@ spec:
 {{ toYaml . | indent 8 }}
 {{- end }}
 
+    spec:
       containers:
         - name: samba
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
