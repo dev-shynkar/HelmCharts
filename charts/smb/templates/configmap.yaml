@@ -4,4 +4,4 @@ metadata:
   name: {{ include "samba.fullname" . }}-config
 data:
   config.yml: |-
-{{ .Values.configYAML | indent 4 }}
+{{ toYaml .Values.configYAML | indent 4 }}
