@@ -32,6 +32,23 @@ spec:
 {{- end }}
 
     spec:
+      initContainers:
+        - name: init-samba-folders
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |
+              {{- range $share := .Values.configYAML.share }}
+              mkdir -p {{ $.Values.persistence.mountPath }}/{{ $share.name }}
+              {{- if $share.uid }}
+              chown -R {{ $share.uid }}:{{ $share.gid }} {{ $.Values.persistence.mountPath }}/{{ $share.name }}
+              {{- end }}
+              {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath }}
+
       containers:
         - name: samba
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
