@@ -14,11 +14,11 @@ service:
       port: 445
 
     wsdd:
-      enabled: false
+      enabled: true
       port: 3702
 
     llmnr:
-      enabled: false
+      enabled: true
       port: 5355
 
 persistence:
@@ -49,6 +49,10 @@ securityContext:
   runAsGroup: 0
   runAsNonRoot: false
   allowPrivilegeEscalation: true
+  capabilities:
+    add:
+      - NET_ADMIN
+      - NET_RAW
 
 nodeSelector: {}
 tolerations: []
