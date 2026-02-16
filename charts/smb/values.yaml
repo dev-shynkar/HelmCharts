@@ -23,7 +23,7 @@ service:
 
 persistence:
   enabled: false
-  hostPath: /mnt/samba-data
+  hostPath: /mnt/smb-share
   mountPath: /samba
 
 env:
@@ -57,53 +57,39 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
-configYAML: |
+configYAML:
   auth:
-    - user: foo
-      group: foo
-      uid: 1000
-      gid: 1000
-      password: bar
-    - user: baz
-      group: xxx
-      uid: 1100
-      gid: 1200
-      password_file: /run/secrets/baz_password
+    - user: mikrotik
+      group: mikrotik
+      uid: 1300
+      gid: 1300
+      password: mikrotik
+    - user: windows
+      group: windows
+      uid: 1400
+      gid: 1400
+      password: windows
 
   global:
-    - "force user = foo"
-    - "force group = foo"
+    - "force user = mikrotik"
+    - "force group = mikrotik"
+    - "force user = windows"
+    - "force group = windows"
 
   share:
-    - name: public
-      comment: Public
-      path: /samba/public
-      browsable: yes
-      readonly: yes
-      guestok: yes
-      veto: no
-      recycle: yes
-    - name: share
-      path: /samba/share
-      browsable: yes
-      readonly: no
-      guestok: yes
-      writelist: foo
-      veto: no
-    - name: foo
-      path: /samba/foo
+    - name: mikrotik-backup
+      path: /samba/mikrotik-backup
       browsable: yes
       readonly: no
       guestok: no
-      validusers: foo
-      writelist: foo
+      validusers: mikrotik
+      writelist: mikrotik
       veto: no
-      hidefiles: /_*/
-    - name: foo-baz
-      path: /samba/foo-baz
+    - name: windows-backup
+      path: /samba/windows-backup
       browsable: yes
       readonly: no
       guestok: no
-      validusers: foo,baz
-      writelist: foo,baz
+      validusers: windows
+      writelist: windows
       veto: no

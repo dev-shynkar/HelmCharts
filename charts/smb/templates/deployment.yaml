@@ -18,33 +18,20 @@ spec:
       labels:
         app.kubernetes.io/name: {{ include "samba.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
-    spec:
 {{- with .Values.nodeSelector }}
-      nodeSelector:
+    nodeSelector:
 {{ toYaml . | indent 8 }}
 {{- end }}
 {{- with .Values.affinity }}
-      affinity:
+    affinity:
 {{ toYaml . | indent 8 }}
 {{- end }}
 {{- with .Values.tolerations }}
-      tolerations:
+    tolerations:
 {{ toYaml . | indent 8 }}
 {{- end }}
 
-      initContainers:
-        - name: init-samba-dirs
-          image: busybox
-          command:
-            - sh
-            - -c
-            - >
-              mkdir -p {{- range .Values.configYAML.share }} {{ .path }}{{ end }} &&
-              chown -R 1300:1400 {{ .Values.persistence.mountPath }}
-          volumeMounts:
-            - name: data
-              mountPath: {{ .Values.persistence.mountPath }}
-
+    spec:
       containers:
         - name: samba
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
