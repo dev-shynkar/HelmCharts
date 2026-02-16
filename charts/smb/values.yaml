@@ -25,7 +25,7 @@ persistence:
   enabled: true
   size: 10Gi
   storageClass: ""
-  mountPath: /data
+  mountPath: /samba
 
 env:
   TZ: Europe/Kyiv
@@ -53,7 +53,6 @@ securityContext:
     add:
       - NET_ADMIN
       - NET_RAW
-      - SYS_RESOURCE
 
 nodeSelector: {}
 tolerations: []
