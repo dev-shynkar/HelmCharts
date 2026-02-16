@@ -3,9 +3,9 @@ entries:
   duplicati:
   - apiVersion: v2
     appVersion: 2.2.0.3
-    created: "2026-02-16T13:02:39.636043024Z"
+    created: "2026-02-16T13:11:42.386055557Z"
     description: A Helm chart for duplicati
-    digest: 4917a722083941416c0f1545e3ee66ea24e03066899688691dcca198ab1943e8
+    digest: 5275c52675ce7271f701d5df02895eaf347ff6f5e16056a76ab70c8dd68ed45d
     home: https://github.com/dev-shynkar/HelmCharts/tree/master/duplicati
     icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
     name: duplicati
@@ -18,9 +18,9 @@ entries:
   go-ecoflow-exporter:
   - apiVersion: v2
     appVersion: 1.5.0
-    created: "2026-02-16T13:02:39.636275298Z"
+    created: "2026-02-16T13:11:42.386305575Z"
     description: Prometheus exporter for EcoFlow devices (remote mode)
-    digest: 26ffe3980bb849a44332dc7bb7eec55f3ea73396b10b11e513d3be6379bf30a3
+    digest: 23836f9ac76f7cf92bd3708f1a3c9fe635a0c37e53e4bbc9bf7ec9d9ce4eb838
     name: go-ecoflow-exporter
     type: application
     urls:
@@ -29,9 +29,9 @@ entries:
   samba:
   - apiVersion: v2
     appVersion: 4.21.4
-    created: "2026-02-16T13:02:39.636601236Z"
+    created: "2026-02-16T13:11:42.386635873Z"
     description: Helm chart for Samba SMB server using crazymax/samba
-    digest: 02ad0991d4aac99e0a26d32352872a1d0975a073ea6749aa2fa972aa11a536d7
+    digest: a8a6ca7ec1848b991f4b0e95bb096178368b2f9bac9dc6bded91290f89ea13cd
     name: samba
     type: application
     urls:
@@ -40,12 +40,12 @@ entries:
   transmission:
   - apiVersion: v2
     appVersion: 4.0.6
-    created: "2026-02-16T13:02:39.636881549Z"
+    created: "2026-02-16T13:11:42.386927058Z"
     description: Transmission torrent client - linuxserver.io image
-    digest: 3fbe21a477e2724c7e2dfe77a758f7f004a69d9c7234a64ed0ff8fa9dc6b1d21
+    digest: 608e0bc2eb4076f2ce7fbfe8e874b0a5792ae53b2c17e1f901447543e0873895
     name: transmission
     type: application
     urls:
     - https://dev-shynkar.github.io/HelmCharts/transmission-0.3.0.tgz
     version: 0.3.0
-generated: "2026-02-16T13:02:39.635209327Z"
+generated: "2026-02-16T13:11:42.385325109Z"
