@@ -18,6 +18,7 @@ spec:
       labels:
         app.kubernetes.io/name: {{ include "samba.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
 {{- with .Values.nodeSelector }}
       nodeSelector:
 {{ toYaml . | indent 8 }}
@@ -31,7 +32,6 @@ spec:
 {{ toYaml . | indent 8 }}
 {{- end }}
 
-    spec:
       containers:
         - name: samba
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -104,8 +104,14 @@ spec:
             name: {{ include "samba.fullname" . }}-config
         - name: data
 {{- if .Values.persistence.enabled }}
+{{- if .Values.persistence.hostPath }}
+          hostPath:
+            path: {{ .Values.persistence.hostPath }}
+            type: DirectoryOrCreate
+{{- else }}
           persistentVolumeClaim:
             claimName: {{ include "samba.fullname" . }}-data
+{{- end }}
 {{- else }}
           emptyDir: {}
 {{- end }}
