@@ -32,6 +32,19 @@ spec:
 {{ toYaml . | indent 8 }}
 {{- end }}
 
+      initContainers:
+        - name: init-samba-dirs
+          image: busybox
+          command:
+            - sh
+            - -c
+            - >
+              mkdir -p {{- range .Values.configYAML.share }} {{ .path }}{{ end }} &&
+              chown -R 1300:1400 {{ .Values.persistence.mountPath }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath }}
+
       containers:
         - name: samba
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
