@@ -98,14 +98,14 @@ spec:
             - name: data
               mountPath: {{ .Values.persistence.mountPath }}
 
-          volumes:
-            - name: config
-              configMap:
-                name: {{ include "samba.fullname" . }}-config
-            - name: data
-          {{- if .Values.persistence.enabled }}
-              persistentVolumeClaim:
-                claimName: {{ include "samba.fullname" . }}-data
-          {{- else }}
-              emptyDir: {}
-          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "samba.fullname" . }}-config
+        - name: data
+{{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "samba.fullname" . }}-data
+{{- else }}
+          emptyDir: {}
+{{- end }}
