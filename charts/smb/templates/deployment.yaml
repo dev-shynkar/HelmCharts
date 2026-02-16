@@ -9,8 +9,6 @@ metadata:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
   replicas: {{ .Values.replicaCount }}
-  strategy:
-    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ include "samba.name" . }}
@@ -20,9 +18,6 @@ spec:
       labels:
         app.kubernetes.io/name: {{ include "samba.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
-    spec:
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
 {{- with .Values.nodeSelector }}
       nodeSelector:
 {{ toYaml . | indent 8 }}
