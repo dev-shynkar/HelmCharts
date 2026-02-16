@@ -45,9 +45,10 @@ env:
 resources: {}
 
 securityContext:
-  runAsUser: 1000
-  runAsGroup: 1000
-  fsGroup: 1000
+  runAsUser: 0
+  runAsGroup: 0
+  runAsNonRoot: false
+  allowPrivilegeEscalation: true
 
 nodeSelector: {}
 tolerations: []
