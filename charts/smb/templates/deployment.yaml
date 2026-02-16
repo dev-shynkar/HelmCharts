@@ -19,6 +19,8 @@ spec:
         app.kubernetes.io/name: {{ include "samba.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      hostNetwork: true                        # <--- додаємо hostNetwork
+      dnsPolicy: ClusterFirstWithHostNet       # <--- для правильного DNS при hostNetwork
 {{- with .Values.nodeSelector }}
       nodeSelector:
 {{ toYaml . | indent 8 }}
