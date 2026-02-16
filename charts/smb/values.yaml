@@ -1,5 +1,3 @@
-replicaCount: 1
-
 image:
   repository: ghcr.io/crazy-max/samba
   tag: latest
