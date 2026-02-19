@@ -53,8 +53,6 @@ spec:
             - name: data
               mountPath: {{ .Values.persistence.mountPath }}
 
-
-
         # Init container to copy ConfigMap into PVC for persistent config
         - name: init-config
           image: busybox
@@ -113,6 +111,23 @@ spec:
               mountPath: {{ .Values.persistence.mountPath }}
             - name: config-data
               mountPath: /data
+
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - sh
+                  - -c
+                  - |
+                    echo "Updating Samba user passwords from /data/config.yml"
+                    while read user; do
+                      password=$(grep -A1 "user: $user" /data/config.yml | grep password | awk '{print $2}')
+                      (echo "$password"; echo "$password") | smbpasswd -s -a "$user" || true
+                    done <<EOF
+                    {{- range .Values.configYAML.auth }}
+                    {{ .user }}
+                    {{- end }}
+                    EOF
 
       volumes:
         - name: data
