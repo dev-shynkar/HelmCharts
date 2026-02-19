@@ -76,12 +76,6 @@ configYAML:
       gid: 1400
       password: windows
 
-  global:
-    - "force user = mikrotik"
-    - "force group = mikrotik"
-    - "force user = windows"
-    - "force group = windows"
-
   share:
     - name: mikrotik-backup
       path: /samba/mikrotik-backup
@@ -91,6 +85,8 @@ configYAML:
       validusers: mikrotik
       writelist: mikrotik
       veto: no
+      uid: 1300
+      gid: 1300
     - name: windows-backup
       path: /samba/windows-backup
       browsable: yes
@@ -99,3 +95,5 @@ configYAML:
       validusers: windows
       writelist: windows
       veto: no
+      uid: 1400
+      gid: 1400
