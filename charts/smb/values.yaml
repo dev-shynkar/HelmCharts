@@ -47,7 +47,13 @@ env:
   WSDD2_NETBIOS_NAME: "SAMBA"
   WSDD2_INTERFACE: "eth0"
 
-resources: {}
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
 
 securityContext:
   runAsUser: 0

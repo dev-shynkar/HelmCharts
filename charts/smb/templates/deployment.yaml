@@ -38,10 +38,18 @@ spec:
         # Init container to create Samba share directories safely
         - name: init-samba-folders
           image: busybox
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 50m
+              memory: 32Mi
           command:
             - sh
             - -c
             - |
+              set -e
               mkdir -p {{ .Values.persistence.mountPath }}
               chown root:root {{ .Values.persistence.mountPath }}
               chmod 755 {{ .Values.persistence.mountPath }}
@@ -58,10 +66,22 @@ spec:
         # Init container to copy ConfigMap into PVC for persistent config
         - name: init-config
           image: busybox
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 50m
+              memory: 32Mi
           command:
             - sh
             - -c
             - |
+              set -e
+              if [ ! -f /config/config.yml ]; then
+                echo "ERROR: ConfigMap file /config/config.yml not found!" >&2
+                exit 1
+              fi
               # Always copy config.yml from ConfigMap to ensure it's up to date
               cp /config/config.yml /data/config.yml
               echo "Config file updated from ConfigMap"
@@ -108,6 +128,33 @@ spec:
           securityContext:
 {{ toYaml .Values.securityContext | indent 12 }}
 
+{{- if .Values.resources }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+{{- end }}
+
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - smbclient -L localhost -N -U guest% 2>&1 | grep -q "Sharename" || exit 1
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pgrep -f smbd > /dev/null || exit 1
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+
           volumeMounts:
             - name: data
               mountPath: {{ .Values.persistence.mountPath }}
@@ -122,9 +169,24 @@ spec:
                   - -c
                   - |
                     echo "Updating Samba user passwords from /data/config.yml"
+                    if [ ! -f /data/config.yml ]; then
+                      echo "ERROR: Config file /data/config.yml not found!" >&2
+                      exit 1
+                    fi
                     while read user; do
-                      password=$(grep -A1 "user: $user" /data/config.yml | grep password | awk '{print $2}')
-                      (echo "$password"; echo "$password") | smbpasswd -s -a "$user" || true
+                      [ -z "$user" ] && continue
+                      password=$(grep -A1 "^user: $user" /data/config.yml | grep "^  password:" | awk '{print $2}')
+                      if [ -z "$password" ]; then
+                        echo "WARNING: Password not found for user $user" >&2
+                        continue
+                      fi
+                      output=$( (echo "$password"; echo "$password") | smbpasswd -s -a "$user" 2>&1 )
+                      if [ $? -ne 0 ]; then
+                        echo "ERROR: Failed to set password for user $user" >&2
+                        echo "$output" | grep -v -i password >&2 || true
+                        exit 1
+                      fi
+                      echo "Password updated for user $user"
                     done <<EOF
                     {{- range .Values.configYAML.auth }}
                     {{ .user }}
