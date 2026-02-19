@@ -41,8 +41,9 @@ spec:
             - -c
             - |
               mkdir -p {{ .Values.persistence.mountPath }}
-              chmod 770 {{ .Values.persistence.mountPath }}
-              
+              chown root:root {{ .Values.persistence.mountPath }}
+              chmod 777 {{ .Values.persistence.mountPath }}
+
               {{- range $share := .Values.configYAML.share }}
               mkdir -p {{ $.Values.persistence.mountPath }}/{{ $share.name }}
               chown -R {{ $share.uid }}:{{ $share.gid }} {{ $.Values.persistence.mountPath }}/{{ $share.name }}
@@ -51,6 +52,7 @@ spec:
           volumeMounts:
             - name: data
               mountPath: {{ .Values.persistence.mountPath }}
+
 
 
         # Init container to copy ConfigMap into PVC for persistent config
