@@ -9,6 +9,18 @@ Name helpers
 {{ .Release.Name }}
 {{- end }}
 
+{{- define "go-ecoflow-exporter.chart" -}}
+{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "go-ecoflow-exporter.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "go-ecoflow-exporter.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
+
 {{/*
 Validation logic
 */}}

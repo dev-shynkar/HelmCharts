@@ -5,20 +5,31 @@ kind: Deployment
 metadata:
   name: {{ include "go-ecoflow-exporter.fullname" . }}
   labels:
-    app: {{ include "go-ecoflow-exporter.name" . }}
+    app.kubernetes.io/name: {{ include "go-ecoflow-exporter.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ include "go-ecoflow-exporter.chart" . }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: {{ include "go-ecoflow-exporter.name" . }}
+      app.kubernetes.io/name: {{ include "go-ecoflow-exporter.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ include "go-ecoflow-exporter.name" . }}
+        app.kubernetes.io/name: {{ include "go-ecoflow-exporter.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+      annotations:
+        checksum/secret: {{ .Values.existingSecret.name | sha256sum }}
     spec:
+{{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ include "go-ecoflow-exporter.serviceAccountName" . }}
+{{- end }}
       containers:
         - name: exporter
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
 
           ports:
@@ -90,5 +101,28 @@ spec:
                   optional: true
             {{- end }}
 
+          securityContext:
+{{ toYaml .Values.securityContext | indent 12 }}
+
+{{- if .Values.resources }}
           resources:
 {{ toYaml .Values.resources | indent 12 }}
+{{- end }}
+
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 2112
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 2112
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
