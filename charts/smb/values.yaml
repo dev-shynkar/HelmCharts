@@ -26,6 +26,12 @@ persistence:
   hostPath: /mnt/smb-share
   mountPath: /samba
 
+configPersistence:
+  enabled: false
+  size: 100Mi
+  storageClass: ""
+  mountPath: /data
+
 env:
   TZ: Europe/Kyiv
   CONFIG_FILE: /data/config.yml

@@ -33,21 +33,42 @@ spec:
 
     spec:
       initContainers:
+        # Init container to create Samba share directories safely
         - name: init-samba-folders
           image: busybox
           command:
             - sh
             - -c
             - |
+              # Loop through all shares
               {{- range $share := .Values.configYAML.share }}
               mkdir -p {{ $.Values.persistence.mountPath }}/{{ $share.name }}
-              {{- if $share.uid }}
-              chown -R {{ $share.uid }}:{{ $share.gid }} {{ $.Values.persistence.mountPath }}/{{ $share.name }}
-              {{- end }}
+              # Only set ownership if directory is empty or owned by root
+              dir_owner=$(stat -c %u {{ $.Values.persistence.mountPath }}/{{ $share.name }})
+              if [ "$dir_owner" = "0" ] || [ -z "$(ls -A {{ $.Values.persistence.mountPath }}/{{ $share.name }})" ]; then
+                  chown -R {{ $share.uid }}:{{ $share.gid }} {{ $.Values.persistence.mountPath }}/{{ $share.name }}
+              fi
               {{- end }}
           volumeMounts:
             - name: data
               mountPath: {{ .Values.persistence.mountPath }}
+
+        # Init container to copy ConfigMap into PVC for persistent config
+        - name: init-config
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |
+              # Only copy config.yml if it does not exist
+              if [ ! -f /data/config.yml ]; then
+                cp /config/config.yml /data/config.yml
+              fi
+          volumeMounts:
+            - name: config-data
+              mountPath: /data
+            - name: config-map
+              mountPath: /config
 
       containers:
         - name: samba
@@ -78,47 +99,24 @@ spec:
 {{- end }}
 
           env:
-            - name: TZ
-              value: "{{ .Values.env.TZ }}"
-            - name: CONFIG_FILE
-              value: "{{ .Values.env.CONFIG_FILE }}"
-            - name: SAMBA_WORKGROUP
-              value: "{{ .Values.env.SAMBA_WORKGROUP }}"
-            - name: SAMBA_SERVER_STRING
-              value: "{{ .Values.env.SAMBA_SERVER_STRING }}"
-            - name: SAMBA_LOG_LEVEL
-              value: "{{ .Values.env.SAMBA_LOG_LEVEL }}"
-            - name: SAMBA_FOLLOW_SYMLINKS
-              value: "{{ .Values.env.SAMBA_FOLLOW_SYMLINKS }}"
-            - name: SAMBA_WIDE_LINKS
-              value: "{{ .Values.env.SAMBA_WIDE_LINKS }}"
-            - name: SAMBA_HOSTS_ALLOW
-              value: "{{ .Values.env.SAMBA_HOSTS_ALLOW }}"
-            - name: SAMBA_INTERFACES
-              value: "{{ .Values.env.SAMBA_INTERFACES }}"
-            - name: WSDD2_ENABLE
-              value: "{{ .Values.env.WSDD2_ENABLE }}"
-            - name: WSDD2_HOSTNAME
-              value: "{{ .Values.env.WSDD2_HOSTNAME }}"
-            - name: WSDD2_NETBIOS_NAME
-              value: "{{ .Values.env.WSDD2_NETBIOS_NAME }}"
-            - name: WSDD2_INTERFACE
-              value: "{{ .Values.env.WSDD2_INTERFACE }}"
+{{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: "{{ $value }}"
+{{- end }}
 
           securityContext:
 {{ toYaml .Values.securityContext | indent 12 }}
 
           volumeMounts:
-            - name: config
-              mountPath: /data/config.yml
-              subPath: config.yml
+            # Mount for Samba share directories
             - name: data
               mountPath: {{ .Values.persistence.mountPath }}
+            # Mount for persistent config
+            - name: config-data
+              mountPath: /data
 
       volumes:
-        - name: config
-          configMap:
-            name: {{ include "samba.fullname" . }}-config
+        # Volume for Samba shares (hostPath, PVC, or emptyDir)
         - name: data
 {{- if .Values.persistence.enabled }}
 {{- if .Values.persistence.hostPath }}
@@ -132,3 +130,13 @@ spec:
 {{- else }}
           emptyDir: {}
 {{- end }}
+
+        # PVC for persistent Samba config.yml
+        - name: config-data
+          persistentVolumeClaim:
+            claimName: {{ include "samba.fullname" . }}-config
+
+        # ConfigMap containing initial config.yml
+        - name: config-map
+          configMap:
+            name: {{ include "samba.fullname" . }}-config
