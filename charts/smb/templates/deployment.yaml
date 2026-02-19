@@ -18,20 +18,20 @@ spec:
       labels:
         app.kubernetes.io/name: {{ include "samba.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
 {{- with .Values.nodeSelector }}
-    nodeSelector:
+      nodeSelector:
 {{ toYaml . | indent 8 }}
 {{- end }}
 {{- with .Values.affinity }}
-    affinity:
+      affinity:
 {{ toYaml . | indent 8 }}
 {{- end }}
 {{- with .Values.tolerations }}
-    tolerations:
+      tolerations:
 {{ toYaml . | indent 8 }}
 {{- end }}
 
-    spec:
       initContainers:
         # Init container to create Samba share directories safely
         - name: init-samba-folders
@@ -40,14 +40,10 @@ spec:
             - sh
             - -c
             - |
-              # Loop through all shares
               {{- range $share := .Values.configYAML.share }}
               mkdir -p {{ $.Values.persistence.mountPath }}/{{ $share.name }}
-              # Only set ownership if directory is empty or owned by root
-              dir_owner=$(stat -c %u {{ $.Values.persistence.mountPath }}/{{ $share.name }})
-              if [ "$dir_owner" = "0" ] || [ -z "$(ls -A {{ $.Values.persistence.mountPath }}/{{ $share.name }})" ]; then
-                  chown -R {{ $share.uid }}:{{ $share.gid }} {{ $.Values.persistence.mountPath }}/{{ $share.name }}
-              fi
+              chown -R {{ $share.uid }}:{{ $share.gid }} {{ $.Values.persistence.mountPath }}/{{ $share.name }}
+              chmod 770 {{ $.Values.persistence.mountPath }}/{{ $share.name }}
               {{- end }}
           volumeMounts:
             - name: data
@@ -60,7 +56,6 @@ spec:
             - sh
             - -c
             - |
-              # Only copy config.yml if it does not exist
               if [ ! -f /data/config.yml ]; then
                 cp /config/config.yml /data/config.yml
               fi
@@ -108,15 +103,12 @@ spec:
 {{ toYaml .Values.securityContext | indent 12 }}
 
           volumeMounts:
-            # Mount for Samba share directories
             - name: data
               mountPath: {{ .Values.persistence.mountPath }}
-            # Mount for persistent config
             - name: config-data
               mountPath: /data
 
       volumes:
-        # Volume for Samba shares (hostPath, PVC, or emptyDir)
         - name: data
 {{- if .Values.persistence.enabled }}
 {{- if .Values.persistence.hostPath }}
@@ -131,12 +123,10 @@ spec:
           emptyDir: {}
 {{- end }}
 
-        # PVC for persistent Samba config.yml
         - name: config-data
           persistentVolumeClaim:
             claimName: {{ include "samba.fullname" . }}-config
 
-        # ConfigMap containing initial config.yml
         - name: config-map
           configMap:
             name: {{ include "samba.fullname" . }}-config
