@@ -18,6 +18,8 @@ spec:
       labels:
         app.kubernetes.io/name: {{ include "samba.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
+      annotations:
+        checksum/config: {{ .Values.configYAML | toYaml | sha256sum }}
     spec:
 {{- with .Values.nodeSelector }}
       nodeSelector:
@@ -42,7 +44,7 @@ spec:
             - |
               mkdir -p {{ .Values.persistence.mountPath }}
               chown root:root {{ .Values.persistence.mountPath }}
-              chmod 777 {{ .Values.persistence.mountPath }}
+              chmod 755 {{ .Values.persistence.mountPath }}
 
               {{- range $share := .Values.configYAML.share }}
               mkdir -p {{ $.Values.persistence.mountPath }}/{{ $share.name }}
@@ -60,9 +62,9 @@ spec:
             - sh
             - -c
             - |
-              if [ ! -f /data/config.yml ]; then
-                cp /config/config.yml /data/config.yml
-              fi
+              # Always copy config.yml from ConfigMap to ensure it's up to date
+              cp /config/config.yml /data/config.yml
+              echo "Config file updated from ConfigMap"
           volumeMounts:
             - name: config-data
               mountPath: /data
