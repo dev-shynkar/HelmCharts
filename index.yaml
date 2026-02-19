@@ -3,9 +3,9 @@ entries:
   duplicati:
   - apiVersion: v2
     appVersion: 2.2.0.3
-    created: "2026-02-16T15:19:17.537767574Z"
+    created: "2026-02-19T16:50:46.677507349Z"
     description: A Helm chart for duplicati
-    digest: 6ce9d9442db3bd3666c24d7bece34ea35155f5752d4799a416c675eba3adf0b9
+    digest: 98c712d0f88e6594487722f4b9f8e02afacdb00b81062df148ea2fa2bebdc9d1
     home: https://github.com/dev-shynkar/HelmCharts/tree/master/duplicati
     icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
     name: duplicati
@@ -17,10 +17,10 @@ entries:
     version: 0.14.0
   go-ecoflow-exporter:
   - apiVersion: v2
-    appVersion: 1.5.0
-    created: "2026-02-16T15:19:17.53816904Z"
+    appVersion: 1.6.0
+    created: "2026-02-19T16:50:46.677754649Z"
     description: Prometheus exporter for EcoFlow devices (remote mode)
-    digest: edb446a86a78278e2f8b94e76f3667cf92e49dfcfcb7f82da0680379630b891e
+    digest: 534d50b4530a6e7397468554e1f58752692d710c062f3cf7a767d3af0f70cda2
     name: go-ecoflow-exporter
     type: application
     urls:
@@ -29,9 +29,9 @@ entries:
   samba:
   - apiVersion: v2
     appVersion: 4.21.4
-    created: "2026-02-16T15:19:17.538711209Z"
+    created: "2026-02-19T16:50:46.678193706Z"
     description: Helm chart for Samba SMB server using crazymax/samba
-    digest: 601f2223d840ebe778b0d939c0916ff81c2da0a2996130ad703c60c861e63ba7
+    digest: 3c74bf6fe9ba77fb1ea12e15cc6f837c03dd6acc69bad97b2a623ddc937d469a
     name: samba
     type: application
     urls:
@@ -40,12 +40,12 @@ entries:
   transmission:
   - apiVersion: v2
     appVersion: 4.0.6
-    created: "2026-02-16T15:19:17.539015753Z"
+    created: "2026-02-19T16:50:46.678615921Z"
     description: Transmission torrent client - linuxserver.io image
-    digest: 665813012b3d845a81a94697d09ccdd35d9288a8f27ae89ec82d75a4cca1e9a7
+    digest: ad911e99555cf93d889a83b85d94b7d6a80d3c377cc29612d90d45a409799861
     name: transmission
     type: application
     urls:
     - https://dev-shynkar.github.io/HelmCharts/transmission-0.3.0.tgz
     version: 0.3.0
-generated: "2026-02-16T15:19:17.536902156Z"
+generated: "2026-02-19T16:50:46.676735103Z"
