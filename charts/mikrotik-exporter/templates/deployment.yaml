@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mikrotik-exporter.fullname" . }}
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "mikrotik-exporter.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "mikrotik-exporter.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mikrotik-exporter.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: {{ include "mikrotik-exporter.name" . }}
+          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          command: ["mktxp"]
+          args:
+            - --cfg-dir
+            - {{ .Values.config.mountPath }}
+            - export
+
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.service.port }}
+
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          volumeMounts:
+            - name: mktxp-config
+              mountPath: {{ .Values.config.mountPath }}
+
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+      volumes:
+        - name: mktxp-config
+          secret:
+            secretName: {{ .Values.config.secretName }}
+
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}

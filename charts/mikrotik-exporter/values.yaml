@@ -1,0 +1,33 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/akpw/mktxp
+  pullPolicy: IfNotPresent
+  tag: ""
+
+nameOverride: "mikrotik-exporter"
+fullnameOverride: "mikrotik-exporter"
+
+namespace: ""
+
+service:
+  type: ClusterIP
+  port: 49090
+
+resources: {}
+
+config:
+  secretName: mktxp-credentials
+  mountPath: /mktxp_config
+
+# Additional volumes
+extraVolumes: []
+
+# Additional mounts
+extraVolumeMounts: []
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
