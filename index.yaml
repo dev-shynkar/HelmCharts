@@ -2,10 +2,10 @@ apiVersion: v1
 entries:
   duplicati:
   - apiVersion: v2
-    appVersion: 2.2.0.3
-    created: "2026-03-11T18:28:50.424044772Z"
+    appVersion: 2.3.0.1
+    created: "2026-04-29T18:20:31.181552196Z"
     description: A Helm chart for duplicati
-    digest: 43215eee4124b47d0b57a4db1506cf9e124b65575b4e73e42b6b77eed0e9df64
+    digest: bff5204a18f258a70a61424ee266018171fc0725d62f0796ef3ab47899bd5005
     home: https://github.com/dev-shynkar/HelmCharts/tree/master/duplicati
     icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
     name: duplicati
@@ -13,36 +13,25 @@ entries:
     - https://hub.docker.com/r/linuxserver/transmission
     type: application
     urls:
-    - https://dev-shynkar.github.io/HelmCharts/duplicati-0.14.0.tgz
-    version: 0.14.0
+    - https://dev-shynkar.github.io/HelmCharts/duplicati-0.15.0.tgz
+    version: 0.15.0
   go-ecoflow-exporter:
   - apiVersion: v2
     appVersion: 1.6.0
-    created: "2026-03-11T18:28:50.424424629Z"
+    created: "2026-04-29T18:20:31.181861656Z"
     description: Prometheus exporter for EcoFlow devices (remote mode)
-    digest: 7ff99a4a7195f6e8a2096487dee23466c1cf0e863acdb13d35797436c7fd99ba
+    digest: 1943081074802e32648cb5bcc2db28f1a5055355dd90b5c48999ee468ae33d65
     name: go-ecoflow-exporter
     type: application
     urls:
     - https://dev-shynkar.github.io/HelmCharts/go-ecoflow-exporter-0.8.0.tgz
     version: 0.8.0
-  mikrotik-exporter:
-  - apiVersion: v2
-    appVersion: 1.2.17
-    created: "2026-03-11T18:28:50.42462638Z"
-    description: mikrotik-exporter
-    digest: 4d5ff0e140f8f1f9bb1571f275375b980ba3cd7015acf1fe1b8587c696c3412a
-    name: mikrotik-exporter
-    type: application
-    urls:
-    - https://dev-shynkar.github.io/HelmCharts/mikrotik-exporter-0.1.0.tgz
-    version: 0.1.0
   samba:
   - apiVersion: v2
     appVersion: 4.21.4
-    created: "2026-03-11T18:28:50.425051974Z"
+    created: "2026-04-29T18:20:31.182279221Z"
     description: Helm chart for Samba SMB server using crazymax/samba
-    digest: f430ea36c976461703b929a7a503e047963a3b6af06094b19652ae2cb86fc15d
+    digest: 2e809c9d30a3862be7b0301d41bacc7518d18d3c8cbdad778c33b2b016265577
     name: samba
     type: application
     urls:
@@ -51,12 +40,12 @@ entries:
   transmission:
   - apiVersion: v2
     appVersion: 4.0.6
-    created: "2026-03-11T18:28:50.42549171Z"
+    created: "2026-04-29T18:20:31.182565106Z"
     description: Transmission torrent client - linuxserver.io image
-    digest: c6787e84bb4a0f099b847e2ccb4abc2de4d19d65ff3a5355ebbd721dd38dad42
+    digest: d925b51de2e89d64de667508282e50a80b6785ee680e121df469a11499a8bb60
     name: transmission
     type: application
     urls:
     - https://dev-shynkar.github.io/HelmCharts/transmission-0.3.0.tgz
     version: 0.3.0
-generated: "2026-03-11T18:28:50.423358279Z"
+generated: "2026-04-29T18:20:31.180860038Z"
