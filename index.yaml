@@ -3,9 +3,9 @@ entries:
   duplicati:
   - apiVersion: v2
     appVersion: 2.3.0.4
-    created: "2026-08-20T11:23:39.316287603Z"
+    created: "2026-08-20T11:37:18.469373406Z"
     description: A Helm chart for duplicati
-    digest: c6bc1ef9c3f1193bb473c25cc06cdb81a49192d5e5fed91c8d83fecec96e5db6
+    digest: abf185270a38e9a7a9fc8824680c6c37e4c76ebfdfbdcf5bb987c8194ce1d8c3
     home: https://github.com/dev-shynkar/HelmCharts/tree/master/duplicati
     icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
     name: duplicati
@@ -13,14 +13,14 @@ entries:
     - https://hub.docker.com/r/duplicati/duplicati
     type: application
     urls:
-    - https://dev-shynkar.github.io/HelmCharts/duplicati-0.17.0.tgz
-    version: 0.17.0
+    - https://dev-shynkar.github.io/HelmCharts/duplicati-0.18.0.tgz
+    version: 0.18.0
   go-ecoflow-exporter:
   - apiVersion: v2
     appVersion: 1.6.0
-    created: "2026-08-20T11:23:39.316505431Z"
+    created: "2026-08-20T11:37:18.46967063Z"
     description: Prometheus exporter for EcoFlow devices (remote mode)
-    digest: 299418accb1ad31cd321f01adeb875d44a14e7c50b5e9b7e2d585d9111812c96
+    digest: b7f422e97be5787daee9d54b0e3e79a63d92be10791be852fc6ac76a9340eb95
     name: go-ecoflow-exporter
     type: application
     urls:
@@ -29,9 +29,9 @@ entries:
   samba:
   - apiVersion: v2
     appVersion: 4.21.4
-    created: "2026-08-20T11:23:39.316900777Z"
+    created: "2026-08-20T11:37:18.470138402Z"
     description: Helm chart for Samba SMB server using crazymax/samba
-    digest: 1c73e34539c34c3aa1c5b20ecaba41bffd4b8d1dd2ea70ea4ef2617a2370b7ed
+    digest: 6303f9f6bd2860325dfd41a32b56616329e68ed43ef265faa0e7615b097d7bfa
     name: samba
     type: application
     urls:
@@ -40,12 +40,12 @@ entries:
   transmission:
   - apiVersion: v2
     appVersion: 4.0.6
-    created: "2026-08-20T11:23:39.317101689Z"
+    created: "2026-08-20T11:37:18.470414035Z"
     description: Transmission torrent client - linuxserver.io image
-    digest: 1ed08c198e40ba3393157dd93ef66453b9d7188d5e967a573d1bda621011871d
+    digest: efa02b15d8bdfc64f60ea1608e52042e999f3b614cc6b318a63f9336b31df803
     name: transmission
     type: application
     urls:
     - https://dev-shynkar.github.io/HelmCharts/transmission-0.3.0.tgz
     version: 0.3.0
-generated: "2026-08-20T11:23:39.315705065Z"
+generated: "2026-08-20T11:37:18.468398565Z"
