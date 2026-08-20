@@ -1,10 +1,10 @@
 apiVersion: v2
-appVersion: 2.3.0.1
+appVersion: 2.3.0.4
 description: A Helm chart for duplicati
 home: https://github.com/dev-shynkar/HelmCharts/tree/master/duplicati
 icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
 name: duplicati
 sources:
-- https://hub.docker.com/r/linuxserver/transmission
+- https://hub.docker.com/r/duplicati/duplicati
 type: application
 version: 0.15.0
