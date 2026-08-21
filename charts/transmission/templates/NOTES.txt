@@ -1,0 +1,75 @@
+Transmission {{ .Chart.AppVersion }} deployed as "{{ .Release.Name }}".
+
+1. Open the web UI:
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}
+{{- end }}
+{{- else }}
+
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "transmission.fullname" . }} 9091:{{ .Values.service.port }}
+  # then http://127.0.0.1:9091
+{{- end }}
+
+{{- if not .Values.auth.existingSecret }}
+
+WARNING: no RPC authentication. The linuxserver.io image only enables it when
+USER and PASS are set, so right now anyone who can reach port {{ .Values.service.port }} can add
+torrents and browse your filesystem through the web UI.
+{{- if .Values.ingress.enabled }}
+The Ingress is ENABLED, so this is very likely exposed beyond your cluster.
+{{- end }}
+
+  kubectl create secret generic transmission-auth -n {{ .Release.Namespace }} \
+    --from-literal=USER=admin --from-literal=PASS='<pick one>'
+
+  # then: auth.existingSecret=transmission-auth
+{{- end }}
+
+{{- if .Values.peerPort.enabled }}
+
+2. BitTorrent peer port: {{ .Values.peerPort.port }} (TCP and UDP).
+{{- if .Values.peerPort.hostPort }}
+
+   It is bound directly on the node (hostPort). Two things are still on you:
+
+     a) Forward {{ .Values.peerPort.port }}/tcp AND {{ .Values.peerPort.port }}/udp on your router to that node's LAN
+        address. UDP carries DHT and µTP — forwarding only TCP leaves you
+        half-connected.
+     b) Confirm it from outside once running: the web UI shows a "Port is
+        open / closed" indicator under Preferences -> Network.
+
+   Because of the hostPort the pod can only be scheduled where {{ .Values.peerPort.port }} is free.
+{{- else }}
+
+   peerPort.hostPort is off, so nothing outside the cluster can reach it and
+   incoming peer connections will not work. Seeding will be effectively dead
+   and download speeds much lower than they should be.
+{{- end }}
+{{- else }}
+
+2. WARNING: peerPort.enabled is false. Transmission can only make outgoing
+   connections — seeding will not work and downloads will be slow.
+{{- end }}
+
+{{- if and .Values.persistence.downloads.enabled (eq .Values.persistence.downloads.type "hostPath") }}
+
+3. Downloads use hostPath {{ .Values.persistence.downloads.hostPath }} on the node selected by your
+   nodeSelector/affinity. Kubernetes creates it as root:root 0755 if missing,
+   which UID {{ .Values.env.PUID | default "1000" }} cannot write to. Check once after the first start:
+
+     sudo chown -R {{ .Values.env.PUID | default "1000" }}:{{ .Values.env.PGID | default "1000" }} {{ .Values.persistence.downloads.hostPath }}
+{{- end }}
+
+{{- if not .Values.persistence.config.enabled }}
+
+WARNING: persistence.config is disabled. settings.json, the torrent list and all
+resume data live in the container filesystem and are lost on every restart.
+{{- end }}
+
+{{- if not .Values.image.tag }}
+
+NOTE: running image tag {{ .Chart.AppVersion }}. linuxserver.io has moved on to 4.1.x and no
+longer publishes updates for this tag. See README ("Image version").
+{{- end }}

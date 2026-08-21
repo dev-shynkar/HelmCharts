@@ -2,5 +2,44 @@ apiVersion: v2
 name: transmission
 description: Transmission torrent client - linuxserver.io image
 type: application
-version: 0.3.0
+
+# Bumped from 0.3.0: the BitTorrent peer port was never exposed, and hardcoded
+# name overrides made two releases collide.
+# See README.md ("Upgrading from 0.3.x") — resource names change.
+version: 0.4.0
 appVersion: "4.0.6"
+
+kubeVersion: ">=1.21.0-0"
+
+home: https://github.com/linuxserver/docker-transmission
+icon: https://raw.githubusercontent.com/linuxserver/docker-templates/master/linuxserver.io/img/transmission-icon.png
+sources:
+  - https://github.com/linuxserver/docker-transmission
+  - https://github.com/transmission/transmission
+
+keywords:
+  - transmission
+  - torrent
+  - bittorrent
+  - linuxserver
+  - self-hosted
+
+
+annotations:
+  artifacthub.io/category: networking
+  artifacthub.io/license: GPL-2.0-or-later
+  artifacthub.io/changes: |
+    - kind: added
+      description: Expose the BitTorrent peer port 51413 TCP+UDP via hostPort, plus the PEERPORT variable
+    - kind: added
+      description: RPC credentials from a Secret; without USER/PASS the web UI has no authentication at all
+    - kind: added
+      description: ServiceAccount, probes, resource defaults, optional /watch volume, NOTES, helm test and a values schema
+    - kind: fixed
+      description: Clear the hardcoded nameOverride/fullnameOverride that made every release use the same names and selector
+    - kind: fixed
+      description: Use Recreate strategy so upgrades do not deadlock on the ReadWriteOnce config volume
+    - kind: fixed
+      description: Require nodeSelector or affinity with hostPath downloads, which otherwise silently follow the pod to another node
+    - kind: removed
+      description: Drop the `namespace` value and metadata.namespace; Helm's --namespace is the single source of truth

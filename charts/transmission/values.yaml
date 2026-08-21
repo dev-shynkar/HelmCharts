@@ -1,20 +1,74 @@
+# Transmission (linuxserver.io image).
+#
+# The container listens on two things:
+#   * 9091            web UI / RPC
+#   * 51413 TCP+UDP   BitTorrent peer port
+#
+# The peer port is what lets other clients connect *to* you. A ClusterIP Service
+# cannot receive those connections, so this chart binds the port on the node
+# itself (hostPort) — see the peerPort section.
+
+# Transmission keeps its whole state in /config on a ReadWriteOnce volume and
+# holds the peer hostPort. Only one instance can run.
 replicaCount: 1
 
 image:
   repository: linuxserver/transmission
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
+  # Defaults to Chart.AppVersion.
+  #
+  # NOTE: appVersion is pinned at 4.0.6 while linuxserver.io is shipping 4.1.x.
+  # The 4.0.6 tag still exists but no longer receives base-image security
+  # updates. Moving up is a deliberate choice — Transmission 4.1 rewrites
+  # settings.json — so back up /config first, then set for example:
+  #   tag: "4.1.3-r0-ls358"
   tag: ""
+  # Takes precedence over tag, e.g. "sha256:abc123...".
+  digest: ""
 
-nameOverride: "transmission"
-fullnameOverride: "transmission"
+imagePullSecrets: []
 
-# Specifies namespace where to live
-namespace: ""
+nameOverride: ""
+fullnameOverride: ""
+
+# RollingUpdate deadlocks on the ReadWriteOnce config volume and on the peer
+# hostPort — the new pod waits for resources the old pod still holds.
+updateStrategy:
+  type: Recreate
+
+revisionHistoryLimit: 3
+
+podAnnotations: {}
+podLabels: {}
+
+serviceAccount:
+  create: true
+  # Transmission never talks to the Kubernetes API, and it downloads arbitrary
+  # content from the internet — do not hand it a cluster token.
+  automount: false
+  annotations: {}
+  name: ""
 
 service:
   type: ClusterIP
   port: 9091
+  annotations: {}
+  nodePort: ""
+
+# BitTorrent peer port.
+#
+# Without it Transmission can only open outgoing connections: seeding barely
+# works and download speeds are a fraction of what they should be.
+peerPort:
+  enabled: true
+  port: 51413
+
+  # Bind the port directly on the node. This is what makes the port reachable;
+  # forward it (TCP *and* UDP) on your router to that node's address.
+  #
+  # hostPort pins the pod to whichever node has the port free, so keep
+  # replicaCount at 1 and set nodeSelector below if you have several nodes.
+  hostPort: true
 
 ingress:
   enabled: false
@@ -24,39 +78,175 @@ ingress:
     - host: transmission.local
       paths:
         - path: /
-          pathType: ImplementationSpecific
+          pathType: Prefix
   tls: []
 
-resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+# Transmission is not resource-free: hash-checking is CPU heavy and a large
+# torrent list costs real memory. Without a memory limit a runaway container
+# can take the node's other pods down with it.
+#
+# 2Gi is headroom for a large library plus verification. Too low a limit gives
+# you an OOMKill -> restart -> re-verify -> OOMKill loop, so check what you
+# actually use before tightening it:
+#   kubectl top pod -n <ns> -l app=transmission
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: "1000m"
+    memory: 2Gi
 
-nodeSelector: {}
+podSecurityContext: {}
 
-tolerations: []
+# The linuxserver.io image starts as root under s6-overlay and drops to
+# PUID/PGID itself, so runAsNonRoot cannot be used as-is.
+#
+# Dropping capabilities should work but is untested here; if the container fails
+# to start, remove the `capabilities` block first. See README ("Hardening").
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  # capabilities:
+  #   drop:
+  #     - ALL
+  #   add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID, KILL]
 
-affinity: {}
+# tcpSocket rather than httpGet on purpose: Transmission checks authorization
+# *before* it redirects "/" to the web UI (libtransmission/rpc-server.cc), so
+# once auth.existingSecret is set an httpGet probe gets 401 and fails. A TCP
+# check proves the RPC server is listening regardless of authentication.
+readinessProbe:
+  enabled: true
+  tcpSocket:
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
 
-persistence:
-  config:
-    enabled: false
-    storageClassName: ""
-    size: "1Gi"
+livenessProbe:
+  enabled: true
+  tcpSocket:
+    port: http
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 5
 
-  downloads:
-    enabled: false
-    type: "hostPath"
-    hostPath: "/media/k3s-data"
+# RPC authentication.
+#
+# The image enables it only when USER and PASS are both set. Until then the web
+# UI is completely open — anyone who can reach it can add torrents. Do not turn
+# on the Ingress without this.
+#
+#   kubectl create secret generic transmission-auth \
+#     --from-literal=USER=admin --from-literal=PASS='...'
+auth:
+  # Secret with USER and PASS keys.
+  existingSecret: ""
+  keys:
+    username: USER
+    password: PASS
 
 env:
   PUID: "1000"
   PGID: "1000"
   TZ: "Europe/Kyiv"
+
+  # Comma-separated IP whitelist for the RPC interface (rpc-whitelist).
+  # Leave unset to disable the whitelist entirely.
+  # WHITELIST: "127.0.0.1,10.0.0.0/8,192.168.0.0/16"
+
+  # Comma-separated DNS names allowed in the Host header (rpc-host-whitelist).
+  # Unset by default, so an Ingress with any hostname works out of the box.
+  # Note that enabling password auth also allows any hostname.
+  # HOST_WHITELIST: "transmission.example.com"
+
+  # TRANSMISSION_WEB_HOME: /combustion-release/
+
+# PEERPORT is derived from peerPort.port and injected automatically; set it here
+# to override.
+extraEnv: []
+# - name: TRANSMISSION_WEB_HOME
+#   value: /flood-for-transmission/
+
+envFrom: []
+# - secretRef:
+#     name: transmission-extra
+
+persistence:
+  # /config — settings.json, torrent state, resume files, statistics.
+  config:
+    enabled: false
+
+    # A volume this chart does NOT manage — mounted only, never created and
+    # never deleted. Do not use it to point at a PVC an earlier version of this
+    # chart created: dropping that PVC out of the release manifest makes Helm
+    # delete it on the next upgrade. Use claimName for that.
+    existingClaim: ""
+
+    # Name of the PVC this chart creates and manages.
+    # Default: <fullname>-config. Set it to keep a name from an older release.
+    claimName: ""
+
+    storageClassName: ""
+    accessModes:
+      - ReadWriteOnce
+    size: "1Gi"
+    annotations: {}
+    # Keep the PVC on `helm uninstall`. Losing it loses every torrent's state.
+    retain: true
+
+  # /downloads
+  downloads:
+    enabled: false
+
+    # hostPath | pvc
+    #
+    # hostPath ties the data to one node. The chart refuses to render unless you
+    # also set nodeSelector or affinity, because otherwise the pod can be
+    # rescheduled elsewhere, DirectoryOrCreate silently makes an empty directory
+    # there, and your torrents appear to vanish.
+    #
+    # Also make sure the directory is writable by PUID/PGID: DirectoryOrCreate
+    # creates it as root:root 0755, which UID 1000 cannot write to.
+    type: "hostPath"
+    hostPath: "/media/k3s-data"
+
+    # See the notes on existingClaim vs claimName under config above.
+    existingClaim: ""
+    claimName: ""
+    storageClassName: ""
+    accessModes:
+      - ReadWriteOnce
+    size: "10Gi"
+    annotations: {}
+    retain: true
+
+  # /watch — drop .torrent files here and Transmission picks them up.
+  watch:
+    enabled: false
+    type: "hostPath"
+    hostPath: ""
+    existingClaim: ""
+
+# Required when persistence.downloads.type is hostPath (see above).
+nodeSelector: {}
+# kubernetes.io/hostname: k3s-node-1
+
+tolerations: []
+affinity: {}
+priorityClassName: ""
+
+podDisruptionBudget:
+  # Off by default: with a single replica a PDB would block node drains.
+  enabled: false
+  minAvailable: ""
+  maxUnavailable: 1
+
+extraVolumes: []
+extraVolumeMounts: []
+initContainers: []
+# Somewhere to put a VPN sidecar (gluetun and friends).
+sidecars: []

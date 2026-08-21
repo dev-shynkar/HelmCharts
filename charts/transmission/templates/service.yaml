@@ -1,14 +1,27 @@
+{{- /*
+  Web UI only. The peer port is deliberately absent: peers connect from the
+  internet, which a ClusterIP Service cannot serve — that is what the hostPort
+  on the Deployment is for.
+*/}}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "transmission.fullname" . }}
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "transmission.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.service.type }}
   selector:
-    app: {{ include "transmission.name" . }}
+    {{- include "transmission.selectorLabels" . | nindent 4 }}
   ports:
-    - port: {{ .Values.service.port }}
-      targetPort: 9091
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
       protocol: TCP
-      name: http
+      {{- if and (has .Values.service.type (list "NodePort" "LoadBalancer")) .Values.service.nodePort }}
+      nodePort: {{ .Values.service.nodePort }}
+      {{- end }}

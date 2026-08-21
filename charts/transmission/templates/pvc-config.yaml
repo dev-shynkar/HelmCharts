@@ -1,0 +1,29 @@
+{{- if and .Values.persistence.config.enabled (not .Values.persistence.config.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "transmission.configClaimName" . }}
+  labels:
+    {{- include "transmission.labels" . | nindent 4 }}
+  annotations:
+    {{- /* settings.json, resume files and statistics — losing this loses every torrent. */}}
+    {{- if .Values.persistence.config.retain }}
+    helm.sh/resource-policy: keep
+    {{- end }}
+    {{- with .Values.persistence.config.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.config.accessModes | nindent 4 }}
+  {{- if .Values.persistence.config.storageClassName }}
+  {{- if eq .Values.persistence.config.storageClassName "-" }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: {{ .Values.persistence.config.storageClassName }}
+  {{- end }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.config.size }}
+{{- end }}

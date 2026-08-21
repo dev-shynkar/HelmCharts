@@ -1,29 +1,99 @@
+{{- include "transmission.validate" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "transmission.fullname" . }}
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "transmission.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+
+  strategy:
+    {{- toYaml .Values.updateStrategy | nindent 4 }}
+
   selector:
     matchLabels:
-      app: {{ include "transmission.name" . }}
+      {{- include "transmission.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
+        {{- include "transmission.selectorLabels" . | nindent 8 }}
+        {{- /* Retained from 0.3.x so existing dashboards keep matching. */}}
         app: {{ include "transmission.name" . }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
+      serviceAccountName: {{ include "transmission.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
       containers:
         - name: transmission
-          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+          image: {{ include "transmission.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
           ports:
-            - containerPort: 9091
-          env:
-            {{- range $key, $value := .Values.env }}
-            - name: {{ $key }}
-              value: "{{ $value }}"
+            - name: http
+              containerPort: 9091
+              protocol: TCP
+            {{- if .Values.peerPort.enabled }}
+            {{- /*
+              The BitTorrent peer port. hostPort binds it on the node so peers
+              on the internet can actually reach it — a ClusterIP Service
+              cannot accept inbound connections. Both TCP and UDP are needed:
+              UDP carries DHT and µTP.
+            */}}
+            - name: peer-tcp
+              containerPort: {{ .Values.peerPort.port }}
+              protocol: TCP
+              {{- if .Values.peerPort.hostPort }}
+              hostPort: {{ .Values.peerPort.port }}
+              {{- end }}
+            - name: peer-udp
+              containerPort: {{ .Values.peerPort.port }}
+              protocol: UDP
+              {{- if .Values.peerPort.hostPort }}
+              hostPort: {{ .Values.peerPort.port }}
+              {{- end }}
             {{- end }}
+
+          env:
+            {{- include "transmission.env" . | trim | nindent 12 }}
+
+          {{- with .Values.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
           volumeMounts:
             {{- if .Values.persistence.config.enabled }}
             - name: config
@@ -33,21 +103,79 @@ spec:
             - name: downloads
               mountPath: /downloads
             {{- end }}
+            {{- if .Values.persistence.watch.enabled }}
+            - name: watch
+              mountPath: /watch
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            {{- omit .Values.readinessProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            {{- omit .Values.livenessProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+
+        {{- with .Values.sidecars }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+
       volumes:
         {{- if .Values.persistence.config.enabled }}
         - name: config
           persistentVolumeClaim:
-            claimName: {{ include "transmission.fullname" . }}-config
+            claimName: {{ include "transmission.configClaimName" . }}
         {{- end }}
+
         {{- if .Values.persistence.downloads.enabled }}
-          {{- if eq .Values.persistence.downloads.type "hostPath" }}
         - name: downloads
+          {{- if eq .Values.persistence.downloads.type "hostPath" }}
           hostPath:
             path: {{ .Values.persistence.downloads.hostPath }}
             type: DirectoryOrCreate
           {{- else }}
-        - name: downloads
           persistentVolumeClaim:
-            claimName: {{ include "transmission.fullname" . }}-downloads
+            claimName: {{ include "transmission.downloadsClaimName" . }}
           {{- end }}
         {{- end }}
+
+        {{- if .Values.persistence.watch.enabled }}
+        - name: watch
+          {{- if eq .Values.persistence.watch.type "hostPath" }}
+          hostPath:
+            path: {{ .Values.persistence.watch.hostPath }}
+            type: DirectoryOrCreate
+          {{- else }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.watch.existingClaim }}
+          {{- end }}
+        {{- end }}
+
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

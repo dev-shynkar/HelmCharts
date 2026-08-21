@@ -1,0 +1,29 @@
+{{- $dl := .Values.persistence.downloads }}
+{{- if and $dl.enabled (eq $dl.type "pvc") (not $dl.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "transmission.downloadsClaimName" . }}
+  labels:
+    {{- include "transmission.labels" . | nindent 4 }}
+  annotations:
+    {{- if $dl.retain }}
+    helm.sh/resource-policy: keep
+    {{- end }}
+    {{- with $dl.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  accessModes:
+    {{- toYaml $dl.accessModes | nindent 4 }}
+  {{- if $dl.storageClassName }}
+  {{- if eq $dl.storageClassName "-" }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: {{ $dl.storageClassName }}
+  {{- end }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $dl.size }}
+{{- end }}

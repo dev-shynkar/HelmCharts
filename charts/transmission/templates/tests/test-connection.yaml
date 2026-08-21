@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "transmission.fullname" . }}-test-connection"
+  labels:
+    {{- include "transmission.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+  containers:
+    - name: check-rpc
+      image: busybox:1.36
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        readOnlyRootFilesystem: true
+      command:
+        - sh
+        - -c
+        - |
+          set -e
+          HOST="{{ include "transmission.fullname" . }}:{{ .Values.service.port }}"
+          echo "GET http://$HOST/transmission/rpc"
+          # Transmission answers 409 (missing session id) when unauthenticated
+          # and 401 when RPC auth is on. Either proves the RPC server is up;
+          # a connection refused or a timeout does not.
+          OUT=$(wget -S -q -O /dev/null "http://$HOST/transmission/rpc" 2>&1 || true)
+          echo "$OUT"
+          echo "$OUT" | grep -qE 'HTTP/1\.[01] (409|401|200)' || {
+            echo "no HTTP response from Transmission RPC"; exit 1; }
+          echo OK
