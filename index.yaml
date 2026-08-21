@@ -3,9 +3,9 @@ entries:
   duplicati:
   - apiVersion: v2
     appVersion: 2.3.0.4
-    created: "2026-08-21T13:05:16.44944052Z"
+    created: "2026-08-21T13:50:55.889534368Z"
     description: A Helm chart for duplicati
-    digest: 85fb0b9a98d1f32328d95f25a58a062982d48432881765af8d39a47a8dd62eb8
+    digest: 2b2da941df52cf2cec64a88baa49e9c06f2e618fca46fde2701de8f4a2228838
     home: https://github.com/dev-shynkar/HelmCharts/tree/master/duplicati
     icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
     name: duplicati
@@ -16,22 +16,59 @@ entries:
     - https://dev-shynkar.github.io/HelmCharts/duplicati-0.18.0.tgz
     version: 0.18.0
   go-ecoflow-exporter:
-  - apiVersion: v2
+  - annotations:
+      artifacthub.io/category: monitoring
+      artifacthub.io/changes: |
+        - kind: fixed
+          description: Send DEBUG_ENABLED, the variable the exporter actually reads (DEBUG was a no-op)
+        - kind: fixed
+          description: Set serviceAccountName even when serviceAccount.create is false
+        - kind: fixed
+          description: Hash the referenced Secret's contents so credential rotation restarts the pod
+        - kind: fixed
+          description: Pass ECOFLOW_DEVICES and pretty names in REST mode too, not only MQTT
+        - kind: added
+          description: ServiceMonitor, PodDisruptionBudget, NetworkPolicy, NOTES.txt, helm test and a values schema
+        - kind: added
+          description: Expose SCRAPING_INTERVAL, MQTT ping/state-refresh intervals, METRIC_PREFIX and PROMETHEUS_PORT
+        - kind: added
+          description: "mqttStallRecovery: opt-in liveness probe that restarts the pod when the upstream MQTT collector wedges"
+        - kind: changed
+          description: Raise deviceOfflineThresholdSeconds to 180 so the upstream force-reconnect path fires far less often
+        - kind: removed
+          description: Drop prometheus.enabled and existingSecret.enabled; the former only ever produced a crash loop
+        - kind: changed
+          description: exporter.devices is now a list and exporter.devicesPrettyNames a map
+      artifacthub.io/license: MIT
+    apiVersion: v2
     appVersion: 1.6.0
-    created: "2026-08-21T13:05:16.449714267Z"
+    created: "2026-08-21T13:50:55.890461809Z"
     description: Prometheus exporter for EcoFlow devices (remote mode)
-    digest: 2bfd58f7bf20596b340c82283b3b6a0262d20da51a4b08f0c0691dea14e85a7d
+    digest: cb6e76ad671749e5c14e235e45f1530a278baa4efbcdf121ca5a540921b32dbe
+    home: https://github.com/tess1o/go-ecoflow-exporter
+    icon: https://raw.githubusercontent.com/tess1o/go-ecoflow-exporter/main/docs/images/dashboard.png
+    keywords:
+    - prometheus
+    - exporter
+    - monitoring
+    - ecoflow
+    - metrics
+    - self-hosted
+    kubeVersion: '>=1.21.0-0'
     name: go-ecoflow-exporter
+    sources:
+    - https://github.com/tess1o/go-ecoflow-exporter
+    - https://github.com/tess1o/go-ecoflow
     type: application
     urls:
-    - https://dev-shynkar.github.io/HelmCharts/go-ecoflow-exporter-0.8.0.tgz
-    version: 0.8.0
+    - https://dev-shynkar.github.io/HelmCharts/go-ecoflow-exporter-0.9.0.tgz
+    version: 0.9.0
   samba:
   - apiVersion: v2
     appVersion: 4.21.4
-    created: "2026-08-21T13:05:16.450157425Z"
+    created: "2026-08-21T13:50:55.890894146Z"
     description: Helm chart for Samba SMB server using crazymax/samba
-    digest: 11bddb2788daee3c03360af7c712c2be1d8c45f695116fc81ccee7f2ff77ce41
+    digest: a96705bfce5c239ac403cc4740251b8f682d6318328c94d1582094a491dc75d7
     name: samba
     type: application
     urls:
@@ -58,9 +95,9 @@ entries:
       artifacthub.io/license: GPL-2.0-or-later
     apiVersion: v2
     appVersion: 4.0.6
-    created: "2026-08-21T13:05:16.451024623Z"
+    created: "2026-08-21T13:50:55.892681504Z"
     description: Transmission torrent client - linuxserver.io image
-    digest: 2d99d8030f05cbd134b72bf78968a49481d0dd13228a81345d6ef52c2ebbd4b4
+    digest: a6f3710052ba1256aa14232b2e35f3688bc4b4a20f71678f75af1ee157fc4a52
     home: https://github.com/linuxserver/docker-transmission
     icon: https://raw.githubusercontent.com/linuxserver/docker-templates/master/linuxserver.io/img/transmission-icon.png
     keywords:
@@ -78,4 +115,4 @@ entries:
     urls:
     - https://dev-shynkar.github.io/HelmCharts/transmission-0.4.0.tgz
     version: 0.4.0
-generated: "2026-08-21T13:05:16.448728533Z"
+generated: "2026-08-21T13:50:55.888797131Z"
