@@ -152,6 +152,43 @@ here. Remember that routing Transmission through a VPN means the peer `hostPort`
 no longer receives anything — you would use the VPN provider's forwarded port
 instead.
 
+### Reinstalling after `helm uninstall`
+
+`retain: true` puts `helm.sh/resource-policy: keep` on the PVC, so `helm
+uninstall` leaves it behind — that is the point, it is what saves the data. The
+cost is that the *next* `helm install` renders a PVC with the same name and
+fails:
+
+```
+Warning: These resources were kept due to the resource policy:
+  [PersistentVolumeClaim] transmission-config
+Error: persistentvolumeclaims "transmission-config" already exists
+```
+
+Helm will adopt an existing object instead of failing, but only if its ownership
+metadata matches the release being installed. Check what is actually on it:
+
+```sh
+kubectl get pvc transmission-config -n media -o jsonpath=\
+'{.metadata.labels.app\.kubernetes\.io/managed-by}{"\n"}{.metadata.annotations.meta\.helm\.sh/release-name}{"\n"}{.metadata.annotations.meta\.helm\.sh/release-namespace}{"\n"}'
+```
+
+If those are not exactly `Helm`, the release name, and the namespace, stamp them
+and install again — Helm then takes the volume over with its data intact:
+
+```sh
+kubectl label pvc transmission-config -n media \
+  app.kubernetes.io/managed-by=Helm --overwrite
+kubectl annotate pvc transmission-config -n media \
+  meta.helm.sh/release-name=transmission \
+  meta.helm.sh/release-namespace=media --overwrite
+```
+
+Prefer `helm upgrade --install` over uninstall/install so this never comes up.
+And if you drive Helm from Terraform, keep `atomic = false`: on a *failed
+install* atomic uninstalls rather than rolls back, which produces exactly this
+state on the following apply.
+
 ## Upgrading from 0.3.x
 
 **Resource names change.** 0.3.x hardcoded `nameOverride`/`fullnameOverride` to
