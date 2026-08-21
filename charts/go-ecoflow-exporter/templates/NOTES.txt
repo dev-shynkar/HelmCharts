@@ -1,0 +1,88 @@
+{{ .Chart.Name }} {{ .Chart.AppVersion }} deployed as "{{ .Release.Name }}" in {{ .Values.exporter.type }} mode.
+
+1. Check that metrics are flowing:
+
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "go-ecoflow-exporter.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+  curl -s localhost:{{ .Values.service.port }}/metrics | grep '^{{ .Values.exporter.metricPrefix }}_'
+
+  An empty result with a healthy pod means the exporter is running but has not
+  collected anything yet — check `kubectl logs` and see note 3 below.
+
+{{- if .Values.serviceMonitor.enabled }}
+
+2. A ServiceMonitor was created in {{ .Values.serviceMonitor.namespace | default .Release.Namespace }}. If Prometheus does not pick it up,
+   its serviceMonitorSelector almost certainly requires a label you have not set:
+
+     serviceMonitor:
+       labels:
+         release: <your kube-prometheus-stack release name>
+{{- else }}
+
+2. Nothing is scraping this exporter yet. Enable one of:
+
+     serviceMonitor.enabled=true              # Prometheus Operator
+     prometheusScrapeAnnotations.enabled=true # annotation-based discovery
+{{- end }}
+
+3. IMPORTANT — the probes cannot tell you the collector is healthy.
+
+   /metrics is the only route the exporter serves, and its HTTP server starts
+   before the {{ .Values.exporter.type | upper }} collector connects. It answers 200 even when the
+   connection to EcoFlow is dead, so liveness only catches a dead process.
+
+   Alert on the data instead, for example:
+
+     absent({{ .Values.exporter.metricPrefix }}_online) or ({{ .Values.exporter.metricPrefix }}_online == 0)
+
+{{- if .Values.mqttStallRecovery.enabled }}
+
+   mqttStallRecovery is ON: the liveness probe restarts this pod after
+   {{ .Values.mqttStallRecovery.afterMinutes }} minutes with no device online. Expect a restart every {{ .Values.mqttStallRecovery.afterMinutes }} minutes
+   for as long as your station is genuinely switched off — that is the intended
+   behaviour, not a fault.
+{{- else if eq .Values.exporter.type "mqtt" }}
+
+   Known upstream bug: if the MQTT connection drops — switching the station off
+   and on hours later is the usual trigger — the exporter can wedge for good and
+   only a pod restart brings metrics back. To let the kubelet handle it:
+
+     mqttStallRecovery:
+       enabled: true
+       afterMinutes: 15
+{{- end }}
+
+{{- if not .Values.existingSecret.name }}
+
+WARNING: existingSecret.name is empty, so credentials must come from envFrom.
+{{- else }}
+
+4. Credentials are read from the Secret "{{ .Values.existingSecret.name }}", which this chart does
+   not create. Required keys for {{ .Values.exporter.type }} mode:
+{{- if eq .Values.exporter.type "mqtt" }}
+     {{ .Values.existingSecret.keys.email }}, {{ .Values.existingSecret.keys.password }}
+{{- else }}
+     {{ .Values.existingSecret.keys.accessKey }}, {{ .Values.existingSecret.keys.secretKey }}
+{{- end }}
+{{- end }}
+
+{{- if and (eq .Values.exporter.type "mqtt") (not .Values.exporter.devices) (not .Values.exporter.devicesPrettyNames) }}
+
+WARNING: MQTT mode requires a device mapping and neither exporter.devices nor
+exporter.devicesPrettyNames is set.
+{{- if .Values.existingSecret.name }}
+The chart falls back to the optional {{ .Values.existingSecret.keys.devices }} key of "{{ .Values.existingSecret.name }}"; if that
+is missing too, the exporter exits with "either ECOFLOW_DEVICES_PRETTY_NAMES or
+ECOFLOW_DEVICES must be provided".
+{{- else }}
+With no existingSecret to fall back to, ECOFLOW_DEVICES must come from envFrom or
+extraEnv, otherwise the exporter exits with "either ECOFLOW_DEVICES_PRETTY_NAMES
+or ECOFLOW_DEVICES must be provided".
+{{- end }}
+Serial numbers are not secret; prefer setting exporter.devices in your values.
+{{- end }}
+
+{{- if gt (int .Values.replicaCount) 1 }}
+
+WARNING: replicaCount is {{ .Values.replicaCount }}. Each replica logs into EcoFlow separately and
+reports the same devices, giving you duplicate series and double the API load.
+{{- end }}

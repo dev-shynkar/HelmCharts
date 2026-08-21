@@ -1,128 +1,128 @@
 {{- include "go-ecoflow-exporter.validate" . }}
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "go-ecoflow-exporter.fullname" . }}
   labels:
-    app.kubernetes.io/name: {{ include "go-ecoflow-exporter.name" . }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
-    helm.sh/chart: {{ include "go-ecoflow-exporter.chart" . }}
+    {{- include "go-ecoflow-exporter.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+
+  strategy:
+    {{- toYaml .Values.updateStrategy | nindent 4 }}
+
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ include "go-ecoflow-exporter.name" . }}
-      app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- include "go-ecoflow-exporter.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ include "go-ecoflow-exporter.name" . }}
-        app.kubernetes.io/instance: {{ .Release.Name }}
-        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        {{- include "go-ecoflow-exporter.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- $annotations := deepCopy (.Values.podAnnotations | default dict) }}
+      {{- if .Values.existingSecret.name }}
+      {{- /* Credentials are read once at startup, so rotating them must roll the pod. */}}
+      {{- $_ := set $annotations "checksum/secret" (include "go-ecoflow-exporter.secretChecksum" .) }}
+      {{- end }}
+      {{- with $annotations }}
       annotations:
-        checksum/secret: {{ .Values.existingSecret.name | sha256sum }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
-{{- if .Values.serviceAccount.create }}
+      {{- /* Set unconditionally: the helper already resolves to "default" when create is false. */}}
       serviceAccountName: {{ include "go-ecoflow-exporter.serviceAccountName" . }}
-{{- end }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
       containers:
         - name: exporter
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: {{ include "go-ecoflow-exporter.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
 
           ports:
             - name: metrics
-              containerPort: 2112
+              containerPort: {{ .Values.containerPort }}
               protocol: TCP
 
           env:
-            # ------------------
-            # Common
-            # ------------------
-            - name: PROMETHEUS_ENABLED
-              value: {{ .Values.prometheus.enabled | quote }}
+            {{- include "go-ecoflow-exporter.env" . | trim | nindent 12 }}
 
-            - name: EXPORTER_TYPE
-              value: {{ .Values.exporter.type | quote }}
+          {{- with .Values.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
 
-            - name: MQTT_DEVICE_OFFLINE_THRESHOLD_SECONDS
-              value: {{ .Values.exporter.mqtt.deviceOfflineThresholdSeconds | quote }}
-
-            - name: DEBUG
-              value: {{ .Values.debug.enabled | quote }}
-
-            # ------------------
-            # REST credentials
-            # ------------------
-            {{- if eq .Values.exporter.type "rest" }}
-            - name: ECOFLOW_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.existingSecret.name }}
-                  key: ECOFLOW_ACCESS_KEY
-
-            - name: ECOFLOW_SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.existingSecret.name }}
-                  key: ECOFLOW_SECRET_KEY
-            {{- end }}
-
-            # ------------------
-            # MQTT credentials + devices
-            # ------------------
-            {{- if eq .Values.exporter.type "mqtt" }}
-            - name: ECOFLOW_EMAIL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.existingSecret.name }}
-                  key: ECOFLOW_EMAIL
-
-            - name: ECOFLOW_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.existingSecret.name }}
-                  key: ECOFLOW_PASSWORD
-
-            - name: ECOFLOW_DEVICES
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.existingSecret.name }}
-                  key: ECOFLOW_DEVICES
-                  optional: true
-
-            - name: ECOFLOW_DEVICES_PRETTY_NAMES
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.existingSecret.name }}
-                  key: ECOFLOW_DEVICES_PRETTY_NAMES
-                  optional: true
-            {{- end }}
-
+          {{- with .Values.securityContext }}
           securityContext:
-{{ toYaml .Values.securityContext | indent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
 
-{{- if .Values.resources }}
+          {{- with .Values.resources }}
           resources:
-{{ toYaml .Values.resources | indent 12 }}
-{{- end }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
 
+          {{- if .Values.readinessProbe.enabled }}
           readinessProbe:
-            httpGet:
-              path: /metrics
-              port: 2112
-            initialDelaySeconds: 5
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
+            {{- omit .Values.readinessProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
 
+          {{- if .Values.mqttStallRecovery.enabled }}
+          {{- /*
+            Restarts the pod once no device has been online for afterMinutes.
+            periodSeconds is pinned to 60 so failureThreshold reads as minutes.
+            A restart is the only exit from the upstream MQTT stall: it re-runs
+            the EcoFlow login and picks up fresh MQTT credentials.
+          */}}
           livenessProbe:
-            httpGet:
-              path: /metrics
-              port: 2112
-            initialDelaySeconds: 30
-            periodSeconds: 30
-            timeoutSeconds: 5
-            failureThreshold: 3
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  wget -q -O - "http://127.0.0.1:{{ .Values.containerPort }}/metrics" \
+                    | awk '/^{{ .Values.exporter.metricPrefix }}_online[{ ]/ && $NF != 0 { ok = 1 } END { exit ok ? 0 : 1 }'
+            initialDelaySeconds: 120
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: {{ .Values.mqttStallRecovery.afterMinutes }}
+          {{- else if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            {{- omit .Values.livenessProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,31 +1,127 @@
+# go-ecoflow-exporter polls EcoFlow (REST) or subscribes to their MQTT broker and
+# serves the result on /metrics. It is a single stateless Go binary.
+#
+# Prometheus output is always on: main.go exits with code 1 when no metric
+# handler is enabled, and this chart wires up no other handler (the exporter also
+# supports TimescaleDB and Redis, which are out of scope here).
+
+# Keep this at 1. Two replicas log into EcoFlow twice and report the same devices
+# from two pods — the MQTT client IDs are random UUIDs so nothing breaks, but you
+# get duplicate series and double the API load for no benefit.
 replicaCount: 1
 
 image:
   repository: tess1o/go-ecoflow-exporter
-  tag: ""  # Uses Chart.AppVersion if empty
+  # Defaults to Chart.AppVersion. Upstream tags releases without a "v" prefix.
+  tag: ""
+  # Takes precedence over tag when set, e.g. "sha256:abc123...".
+  digest: ""
   pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# A rollout would otherwise briefly run two exporters and emit duplicate series.
+# A few seconds of missing metrics is more honest than double-counting.
+updateStrategy:
+  type: Recreate
+
+revisionHistoryLimit: 3
+
+podAnnotations: {}
+podLabels: {}
+
+# Port the exporter listens on inside the container (PROMETHEUS_PORT).
+containerPort: 2112
 
 service:
   type: ClusterIP
   port: 2112
+  annotations: {}
 
 exporter:
-  type: mqtt        # mqtt | rest
+  # mqtt: subscribe to EcoFlow's MQTT broker, near real-time, needs email/password.
+  # rest: poll the EcoFlow REST API, needs an access/secret key pair.
+  type: mqtt
 
-  devices: ""
-  devicesPrettyNames: ""
+  # Metric name prefix (METRIC_PREFIX). Changing it renames every metric, so any
+  # existing dashboards and alerts have to be updated too.
+  metricPrefix: ecoflow
+
+  # Device serial numbers, e.g. ["R33XXXXXXXXX", "R33YYYYYYYYY"].
+  # Serial numbers are not secret, so they belong here rather than in the Secret.
+  # Leave empty to fall back to the ECOFLOW_DEVICES key of the existing Secret.
+  devices: []
+
+  # Optional friendly names, keyed by serial number. Rendered as the JSON the
+  # exporter expects. A device listed here does not also need to be in `devices`.
+  # Falls back to the ECOFLOW_DEVICES_PRETTY_NAMES key of the Secret when empty.
+  devicesPrettyNames: {}
+  # R33XXXXXXXXX: My Delta 2
+  # R33YYYYYYYYY: Delta Pro backup
 
   mqtt:
-    deviceOfflineThresholdSeconds: 30
+    # A device that has not reported within this many seconds is marked offline.
+    #
+    # This also drives a destructive path upstream: when *every* device is
+    # offline, monitorDeviceStatus() tears down the broker connection and
+    # reconnects — see mqttStallRecovery below. That check runs once per
+    # threshold, so a low value makes the exporter thrash (and hammer EcoFlow)
+    # the whole time your station is switched off. 180s keeps offline detection
+    # reasonable while firing that path six times less often than the old 30s.
+    deviceOfflineThresholdSeconds: 180
+    pingIntervalSeconds: 20
+    stateRefreshIntervalSeconds: 300
 
+  rest:
+    # Seconds between REST polls (SCRAPING_INTERVAL). EcoFlow rate-limits the
+    # API, so do not push this much below the default.
+    scrapingIntervalSeconds: 30
+
+# Credentials are always read from a Secret you create yourself — the chart never
+# renders one, so they stay out of your values file and out of Helm's release
+# storage. Set `name` to "" only if you supply the credentials through `envFrom`.
+#
+# MQTT mode needs: ECOFLOW_EMAIL, ECOFLOW_PASSWORD
+# REST mode needs: ECOFLOW_ACCESS_KEY, ECOFLOW_SECRET_KEY
+#
+#   kubectl create secret generic go-ecoflow-exporter \
+#     --from-literal=ECOFLOW_EMAIL=you@example.com \
+#     --from-literal=ECOFLOW_PASSWORD=...
 existingSecret:
-  enabled: true
   name: go-ecoflow-exporter
-
-prometheus:
-  enabled: true
+  # Override if your Secret (External Secrets, SOPS, ...) uses different keys.
+  keys:
+    accessKey: ECOFLOW_ACCESS_KEY
+    secretKey: ECOFLOW_SECRET_KEY
+    email: ECOFLOW_EMAIL
+    password: ECOFLOW_PASSWORD
+    devices: ECOFLOW_DEVICES
+    devicesPrettyNames: ECOFLOW_DEVICES_PRETTY_NAMES
 
 debug:
+  # Sets DEBUG_ENABLED. Verbose: logs every device payload.
+  enabled: false
+
+# Prometheus Operator ServiceMonitor.
+serviceMonitor:
+  enabled: false
+  # Namespace to create it in; defaults to the release namespace.
+  namespace: ""
+  # Extra labels — kube-prometheus-stack usually needs `release: <stack name>`.
+  labels: {}
+  annotations: {}
+  interval: 30s
+  scrapeTimeout: 10s
+  honorLabels: false
+  relabelings: []
+  metricRelabelings: []
+
+# Fallback for setups without the Prometheus Operator: adds the classic
+# prometheus.io/* scrape annotations to the Service.
+prometheusScrapeAnnotations:
   enabled: false
 
 resources:
@@ -36,19 +132,110 @@ resources:
     cpu: 50m
     memory: 64Mi
 
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
 securityContext:
   runAsNonRoot: true
   runAsUser: 1000
   runAsGroup: 1000
   allowPrivilegeEscalation: false
+  # A static CGO_ENABLED=0 Go binary that writes nothing to disk.
+  readOnlyRootFilesystem: true
   capabilities:
     drop:
       - ALL
 
 serviceAccount:
   create: true
+  # The exporter never talks to the Kubernetes API.
+  automount: false
+  annotations: {}
   name: ""
+
+# Workaround for an upstream bug that strands the MQTT collector permanently.
+#
+# When every device goes offline (you switch the station off), the exporter
+# force-disconnects from the broker and calls Connect() without checking the
+# result. The EcoFlow MQTT credentials it reconnects with were fetched once at
+# process start and are short-lived, so once they expire no reconnect can ever
+# succeed — and monitorDeviceStatus()/startPingRoutine() both bail out early on
+# `!IsConnected()`, so nothing in the process retries. Metrics stay dead until
+# the pod is restarted, which re-runs the login and gets fresh credentials.
+#
+# Enabling this swaps the liveness probe for one that also fails when no device
+# has reported for `afterMinutes`, letting the kubelet do that restart for you.
+#
+# Trade-off: while your station is genuinely switched off there is nothing to
+# scrape either way, so the pod will restart every `afterMinutes` until it comes
+# back. Raise `afterMinutes` if that churn bothers you.
+mqttStallRecovery:
+  enabled: false
+  afterMinutes: 15
+
+# NOTE: /metrics is the only route the exporter serves, and its HTTP server is
+# started before the MQTT/REST collector connects — so a 200 here proves the
+# process is alive, not that data is flowing. Alert on the metrics themselves
+# (see README) rather than relying on these probes to catch a stalled collector.
+#
+# This livenessProbe is ignored when mqttStallRecovery.enabled is true.
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /metrics
+    port: metrics
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /metrics
+    port: metrics
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+podDisruptionBudget:
+  # Off by default: with a single replica a PDB would block node drains.
+  enabled: false
+  minAvailable: ""
+  maxUnavailable: 1
+
+networkPolicy:
+  enabled: false
+  # Empty means "allow from anywhere in the cluster". Restrict it to your
+  # Prometheus namespace in production.
+  ingressFrom: []
+  # - namespaceSelector:
+  #     matchLabels:
+  #       kubernetes.io/metadata.name: monitoring
+  #
+  # Egress stays unrestricted unless you add rules. The exporter needs DNS plus
+  # outbound HTTPS/MQTT to EcoFlow's cloud, so a naive deny-all will break it.
+  egress: []
+
+# Extra environment variables (list form, supports valueFrom).
+extraEnv: []
+# - name: HTTPS_PROXY
+#   value: http://proxy.internal:3128
+
+# Pull environment variables from existing Secrets/ConfigMaps. Use this instead
+# of existingSecret.name if your credentials live in a differently shaped Secret.
+envFrom: []
+# - secretRef:
+#     name: ecoflow-credentials
 
 nodeSelector: {}
 tolerations: []
 affinity: {}
+topologySpreadConstraints: []
+priorityClassName: ""

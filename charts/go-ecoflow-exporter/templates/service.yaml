@@ -3,17 +3,24 @@ kind: Service
 metadata:
   name: {{ include "go-ecoflow-exporter.fullname" . }}
   labels:
-    app.kubernetes.io/name: {{ include "go-ecoflow-exporter.name" . }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
-    helm.sh/chart: {{ include "go-ecoflow-exporter.chart" . }}
+    {{- include "go-ecoflow-exporter.labels" . | nindent 4 }}
+  {{- $annotations := deepCopy (.Values.service.annotations | default dict) }}
+  {{- if .Values.prometheusScrapeAnnotations.enabled }}
+  {{- $_ := set $annotations "prometheus.io/scrape" "true" }}
+  {{- $_ := set $annotations "prometheus.io/port" (.Values.service.port | toString) }}
+  {{- $_ := set $annotations "prometheus.io/path" "/metrics" }}
+  {{- end }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.service.type }}
   ports:
-    - port: {{ .Values.service.port }}
-      targetPort: 2112
+    {{- /* Named "metrics" so a ServiceMonitor can select it by name. */}}
+    - name: metrics
+      port: {{ .Values.service.port }}
+      targetPort: metrics
       protocol: TCP
-      name: http
   selector:
-    app.kubernetes.io/name: {{ include "go-ecoflow-exporter.name" . }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- include "go-ecoflow-exporter.selectorLabels" . | nindent 4 }}

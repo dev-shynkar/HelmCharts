@@ -2,5 +2,51 @@ apiVersion: v2
 name: go-ecoflow-exporter
 description: Prometheus exporter for EcoFlow devices (remote mode)
 type: application
-version: 0.8.0
+
+# Bumped from 0.8.0: DEBUG was never read by the app, prometheus.enabled could
+# only crash-loop the pod, and the secret checksum hashed a constant.
+# See README.md ("Upgrading from 0.8.x") for the values changes.
+version: 0.9.0
 appVersion: "1.6.0"
+
+# networking.k8s.io/v1 Ingress-era APIs plus policy/v1 PodDisruptionBudget.
+kubeVersion: ">=1.21.0-0"
+
+home: https://github.com/tess1o/go-ecoflow-exporter
+icon: https://raw.githubusercontent.com/tess1o/go-ecoflow-exporter/main/docs/images/dashboard.png
+sources:
+  - https://github.com/tess1o/go-ecoflow-exporter
+  - https://github.com/tess1o/go-ecoflow
+
+keywords:
+  - prometheus
+  - exporter
+  - monitoring
+  - ecoflow
+  - metrics
+  - self-hosted
+
+annotations:
+  artifacthub.io/category: monitoring
+  artifacthub.io/license: MIT
+  artifacthub.io/changes: |
+    - kind: fixed
+      description: Send DEBUG_ENABLED, the variable the exporter actually reads (DEBUG was a no-op)
+    - kind: fixed
+      description: Set serviceAccountName even when serviceAccount.create is false
+    - kind: fixed
+      description: Hash the referenced Secret's contents so credential rotation restarts the pod
+    - kind: fixed
+      description: Pass ECOFLOW_DEVICES and pretty names in REST mode too, not only MQTT
+    - kind: added
+      description: ServiceMonitor, PodDisruptionBudget, NetworkPolicy, NOTES.txt, helm test and a values schema
+    - kind: added
+      description: Expose SCRAPING_INTERVAL, MQTT ping/state-refresh intervals, METRIC_PREFIX and PROMETHEUS_PORT
+    - kind: added
+      description: "mqttStallRecovery: opt-in liveness probe that restarts the pod when the upstream MQTT collector wedges"
+    - kind: changed
+      description: Raise deviceOfflineThresholdSeconds to 180 so the upstream force-reconnect path fires far less often
+    - kind: removed
+      description: Drop prometheus.enabled and existingSecret.enabled; the former only ever produced a crash loop
+    - kind: changed
+      description: exporter.devices is now a list and exporter.devicesPrettyNames a map
