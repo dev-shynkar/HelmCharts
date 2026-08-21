@@ -3,9 +3,9 @@ entries:
   duplicati:
   - apiVersion: v2
     appVersion: 2.3.0.4
-    created: "2026-08-20T11:37:18.469373406Z"
+    created: "2026-08-21T13:05:16.44944052Z"
     description: A Helm chart for duplicati
-    digest: abf185270a38e9a7a9fc8824680c6c37e4c76ebfdfbdcf5bb987c8194ce1d8c3
+    digest: 85fb0b9a98d1f32328d95f25a58a062982d48432881765af8d39a47a8dd62eb8
     home: https://github.com/dev-shynkar/HelmCharts/tree/master/duplicati
     icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
     name: duplicati
@@ -18,9 +18,9 @@ entries:
   go-ecoflow-exporter:
   - apiVersion: v2
     appVersion: 1.6.0
-    created: "2026-08-20T11:37:18.46967063Z"
+    created: "2026-08-21T13:05:16.449714267Z"
     description: Prometheus exporter for EcoFlow devices (remote mode)
-    digest: b7f422e97be5787daee9d54b0e3e79a63d92be10791be852fc6ac76a9340eb95
+    digest: 2bfd58f7bf20596b340c82283b3b6a0262d20da51a4b08f0c0691dea14e85a7d
     name: go-ecoflow-exporter
     type: application
     urls:
@@ -29,23 +29,53 @@ entries:
   samba:
   - apiVersion: v2
     appVersion: 4.21.4
-    created: "2026-08-20T11:37:18.470138402Z"
+    created: "2026-08-21T13:05:16.450157425Z"
     description: Helm chart for Samba SMB server using crazymax/samba
-    digest: 6303f9f6bd2860325dfd41a32b56616329e68ed43ef265faa0e7615b097d7bfa
+    digest: 11bddb2788daee3c03360af7c712c2be1d8c45f695116fc81ccee7f2ff77ce41
     name: samba
     type: application
     urls:
     - https://dev-shynkar.github.io/HelmCharts/samba-0.3.0.tgz
     version: 0.3.0
   transmission:
-  - apiVersion: v2
+  - annotations:
+      artifacthub.io/category: networking
+      artifacthub.io/changes: |
+        - kind: added
+          description: Expose the BitTorrent peer port 51413 TCP+UDP via hostPort, plus the PEERPORT variable
+        - kind: added
+          description: RPC credentials from a Secret; without USER/PASS the web UI has no authentication at all
+        - kind: added
+          description: ServiceAccount, probes, resource defaults, optional /watch volume, NOTES, helm test and a values schema
+        - kind: fixed
+          description: Clear the hardcoded nameOverride/fullnameOverride that made every release use the same names and selector
+        - kind: fixed
+          description: Use Recreate strategy so upgrades do not deadlock on the ReadWriteOnce config volume
+        - kind: fixed
+          description: Require nodeSelector or affinity with hostPath downloads, which otherwise silently follow the pod to another node
+        - kind: removed
+          description: Drop the `namespace` value and metadata.namespace; Helm's --namespace is the single source of truth
+      artifacthub.io/license: GPL-2.0-or-later
+    apiVersion: v2
     appVersion: 4.0.6
-    created: "2026-08-20T11:37:18.470414035Z"
+    created: "2026-08-21T13:05:16.451024623Z"
     description: Transmission torrent client - linuxserver.io image
-    digest: efa02b15d8bdfc64f60ea1608e52042e999f3b614cc6b318a63f9336b31df803
+    digest: 2d99d8030f05cbd134b72bf78968a49481d0dd13228a81345d6ef52c2ebbd4b4
+    home: https://github.com/linuxserver/docker-transmission
+    icon: https://raw.githubusercontent.com/linuxserver/docker-templates/master/linuxserver.io/img/transmission-icon.png
+    keywords:
+    - transmission
+    - torrent
+    - bittorrent
+    - linuxserver
+    - self-hosted
+    kubeVersion: '>=1.21.0-0'
     name: transmission
+    sources:
+    - https://github.com/linuxserver/docker-transmission
+    - https://github.com/transmission/transmission
     type: application
     urls:
-    - https://dev-shynkar.github.io/HelmCharts/transmission-0.3.0.tgz
-    version: 0.3.0
-generated: "2026-08-20T11:37:18.468398565Z"
+    - https://dev-shynkar.github.io/HelmCharts/transmission-0.4.0.tgz
+    version: 0.4.0
+generated: "2026-08-21T13:05:16.448728533Z"
