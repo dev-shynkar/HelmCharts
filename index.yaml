@@ -3,9 +3,9 @@ entries:
   duplicati:
   - apiVersion: v2
     appVersion: 2.3.0.4
-    created: "2026-08-21T13:50:55.889534368Z"
+    created: "2026-08-21T14:57:19.842594473Z"
     description: A Helm chart for duplicati
-    digest: 2b2da941df52cf2cec64a88baa49e9c06f2e618fca46fde2701de8f4a2228838
+    digest: 7c2edf6f322c19c4e46660129dcbef9a13b8cbf5ee2e374b3981f5a7d4c9dd7c
     home: https://github.com/dev-shynkar/HelmCharts/tree/master/duplicati
     icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
     name: duplicati
@@ -42,9 +42,9 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 1.6.0
-    created: "2026-08-21T13:50:55.890461809Z"
+    created: "2026-08-21T14:57:19.843514854Z"
     description: Prometheus exporter for EcoFlow devices (remote mode)
-    digest: cb6e76ad671749e5c14e235e45f1530a278baa4efbcdf121ca5a540921b32dbe
+    digest: 56c1f6dbefae9be4a4799b5e5241420f38b21a43e76c23fe728dc57a60c0a1b8
     home: https://github.com/tess1o/go-ecoflow-exporter
     icon: https://raw.githubusercontent.com/tess1o/go-ecoflow-exporter/main/docs/images/dashboard.png
     keywords:
@@ -66,9 +66,9 @@ entries:
   samba:
   - apiVersion: v2
     appVersion: 4.21.4
-    created: "2026-08-21T13:50:55.890894146Z"
+    created: "2026-08-21T14:57:19.844367955Z"
     description: Helm chart for Samba SMB server using crazymax/samba
-    digest: a96705bfce5c239ac403cc4740251b8f682d6318328c94d1582094a491dc75d7
+    digest: ed6dad22cbd363504691ce78d3aa421a1873d661428e32dea1b0189c6ee5c81f
     name: samba
     type: application
     urls:
@@ -94,10 +94,10 @@ entries:
           description: Drop the `namespace` value and metadata.namespace; Helm's --namespace is the single source of truth
       artifacthub.io/license: GPL-2.0-or-later
     apiVersion: v2
-    appVersion: 4.0.6
-    created: "2026-08-21T13:50:55.892681504Z"
+    appVersion: 4.1.3
+    created: "2026-08-21T14:57:19.845602965Z"
     description: Transmission torrent client - linuxserver.io image
-    digest: a6f3710052ba1256aa14232b2e35f3688bc4b4a20f71678f75af1ee157fc4a52
+    digest: 27e6cecb87a1cdff6c7370ae852df8229098a3b19ab87eb8be68790be24b4fd9
     home: https://github.com/linuxserver/docker-transmission
     icon: https://raw.githubusercontent.com/linuxserver/docker-templates/master/linuxserver.io/img/transmission-icon.png
     keywords:
@@ -113,6 +113,6 @@ entries:
     - https://github.com/transmission/transmission
     type: application
     urls:
-    - https://dev-shynkar.github.io/HelmCharts/transmission-0.4.0.tgz
-    version: 0.4.0
-generated: "2026-08-21T13:50:55.888797131Z"
+    - https://dev-shynkar.github.io/HelmCharts/transmission-0.5.0.tgz
+    version: 0.5.0
+generated: "2026-08-21T14:57:19.841887069Z"
