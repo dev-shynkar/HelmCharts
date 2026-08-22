@@ -1,0 +1,21 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "pingvin-share-x.fullname" . }}
+  labels:
+    {{- include "pingvin-share-x.labels" . | nindent 4 }}
+spec:
+  {{- /*
+    With replicaCount: 1, minAvailable: 1 makes the pod undrainable and blocks
+    node maintenance forever. maxUnavailable: 1 is the safe default.
+  */}}
+  {{- if .Values.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "pingvin-share-x.selectorLabels" . | nindent 6 }}
+{{- end }}

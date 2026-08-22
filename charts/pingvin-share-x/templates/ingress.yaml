@@ -1,0 +1,54 @@
+{{- if .Values.ingress.enabled }}
+{{- /*
+  With the bundled Caddy disabled, nothing inside the pod routes /api to the
+  backend — the Ingress has to. Fail loudly rather than ship a release whose UI
+  loads but whose every API call 404s against the Next.js server.
+*/}}
+{{- $hasApiRoute := false }}
+{{- range .Values.ingress.hosts }}
+{{- range .paths }}
+{{- if eq (.port | default "http") "api" }}
+{{- $hasApiRoute = true }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if not $hasApiRoute }}
+{{- fail "ingress.hosts[].paths must contain an entry with `port: api` (usually `path: /api`), otherwise the backend is unreachable. See values.yaml." }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "pingvin-share-x.fullname" . }}
+  labels:
+    {{- include "pingvin-share-x.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- /* Most controllers match longest-prefix, but list /api first anyway. */}}
+          {{- range .paths }}
+          - path: {{ .path | quote }}
+            pathType: {{ .pathType | default "Prefix" }}
+            backend:
+              service:
+                name: {{ include "pingvin-share-x.fullname" $ }}
+                port:
+                  name: {{ .port | default "http" }}
+          {{- end }}
+    {{- end }}
+{{- end }}

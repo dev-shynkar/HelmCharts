@@ -1,0 +1,291 @@
+# Pingvin Share X runs two processes in one container:
+#   * the Next.js frontend on port 3333
+#   * the NestJS backend   on port 8080 (BACKEND_PORT)
+# The image can put a Caddy reverse proxy on port 3000 in front of both, but this
+# chart disables it (CADDY_DISABLED=true) and routes /api to the backend from the
+# Ingress instead. That removes a proxy hop and keeps the container non-root.
+# See README.md if you want to re-enable Caddy.
+
+# SQLite + a ReadWriteOnce volume + an in-memory cache mean only one instance can
+# run at a time. Do not raise this without moving to Redis, S3 and a RWX volume.
+replicaCount: 1
+
+image:
+  repository: smp46/pingvin-share-x
+  pullPolicy: IfNotPresent
+  # Defaults to "v<Chart.AppVersion>" when empty, so the chart and the image
+  # cannot drift apart. Set explicitly to pin a different version.
+  tag: ""
+  # Takes precedence over tag when set, e.g. "sha256:abc123...".
+  digest: ""
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  # Pingvin Share X never talks to the Kubernetes API, so the token is not needed.
+  automount: false
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+# RollingUpdate deadlocks on ReadWriteOnce volumes: the new pod waits for a PVC
+# that the old pod still holds. Keep this at Recreate unless you use RWX storage.
+updateStrategy:
+  type: Recreate
+
+revisionHistoryLimit: 3
+
+# Uploads and downloads of large files are long-lived connections; give them time
+# to drain before the pod is killed during a rollout.
+terminationGracePeriodSeconds: 120
+
+podSecurityContext:
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  # Next.js writes its incremental cache under /opt/app/frontend/.next/cache, so
+  # the root filesystem cannot be read-only without an extra emptyDir there.
+  # See README.md ("Read-only root filesystem") for the exact values.
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+
+# Ports inside the container.
+containerPorts:
+  # The image entrypoint hardcodes PORT=3333 for the frontend. Do not change.
+  http: 3333
+  # Passed to the container as BACKEND_PORT.
+  api: 8080
+
+service:
+  type: ClusterIP
+  annotations: {}
+  ports:
+    # Browser traffic and server-side rendering.
+    http: 3000
+    # The REST API (/api/*).
+    api: 8080
+  # Only used when type is NodePort or LoadBalancer.
+  nodePorts:
+    http: ""
+    api: ""
+  # Only used when type is LoadBalancer.
+  loadBalancerIP: ""
+  loadBalancerSourceRanges: []
+  externalTrafficPolicy: ""
+
+ingress:
+  enabled: false
+  className: ""
+  # A file sharing app needs an unrestricted body size: ingress-nginx defaults to
+  # 1 MB, which is smaller than Pingvin's 10 MB upload chunks, so every upload
+  # would fail with HTTP 413.
+  annotations: {}
+  # ingress-nginx:
+  #   nginx.ingress.kubernetes.io/proxy-body-size: "0"
+  #   nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+  #   nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+  #   nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+  #
+  # Traefik: create a Middleware with `buffering.maxRequestBodyBytes: 0` and
+  # reference it here, Traefik has no body limit by default but does buffer.
+  #
+  # HAProxy:
+  #   haproxy.org/timeout-client: "600s"
+  #   haproxy.org/timeout-server: "600s"
+
+  # IMPORTANT: the /api path must come first and point at the "api" service port.
+  # Without it the backend is unreachable and the UI will not load.
+  hosts:
+    - host: pingvin.example.com
+      paths:
+        - path: /api
+          pathType: Prefix
+          port: api
+        - path: /
+          pathType: Prefix
+          port: http
+
+  tls: []
+  # tls:
+  #   - secretName: pingvin-tls
+  #     hosts:
+  #       - pingvin.example.com
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    # Creating a share builds a zip archive at compression level 9 by default
+    # (share.zipCompressionLevel), which is CPU bound. A low limit turns every
+    # download of a multi-file share into minutes of CFS throttling.
+    # Consider dropping the CPU limit entirely and keeping only the request.
+    cpu: "1000m"
+    memory: 1Gi
+
+# Applies to the Node.js processes; leave empty to inherit the node's CPU count.
+# Worth setting to roughly the CPU limit so libuv does not oversubscribe.
+uvThreadpoolSize: ""
+
+podDisruptionBudget:
+  # Off by default: with a single replica any PDB would block node drains.
+  enabled: false
+  minAvailable: ""
+  maxUnavailable: 1
+
+networkPolicy:
+  enabled: false
+  # Empty means "allow from anywhere in the cluster". Add namespaceSelector or
+  # podSelector entries to restrict it to your ingress controller.
+  ingressFrom: []
+  # - namespaceSelector:
+  #     matchLabels:
+  #       kubernetes.io/metadata.name: ingress-nginx
+  #
+  # Egress is left unrestricted unless you add rules here. Remember that the app
+  # needs DNS, and SMTP / OAuth / S3 / ClamAV / Redis if you enable them.
+  egress: []
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+topologySpreadConstraints: []
+
+priorityClassName: ""
+
+# Pingvin Share X configuration.
+#
+# BACKEND_PORT, API_URL and CADDY_DISABLED are derived from containerPorts and
+# injected by the chart; anything you set here overrides them.
+#
+# PUID/PGID are deliberately absent: the image entrypoint (create-user.sh) exits
+# before reading them whenever the container is not root, which is always the
+# case here. File ownership is handled by podSecurityContext.fsGroup instead.
+env:
+  TRUST_PROXY: "true"
+
+# Optional additional environment variables (list form, supports valueFrom).
+extraEnv: []
+# - name: CLAMAV_HOST
+#   value: clamav
+# - name: CLAMAV_PORT
+#   value: "3310"
+# - name: PV_LOG_LEVEL
+#   value: warn
+
+# Pull environment variables from existing Secrets/ConfigMaps.
+envFrom: []
+# - secretRef:
+#     name: pingvin-share-x-smtp
+
+# Persistent storage for backend data and the SQLite DB.
+data:
+  persistence:
+    enabled: true
+    existingClaim: ""
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 5Gi
+    annotations: {}
+    # Keeps the PVC (and every uploaded file) when the release is uninstalled.
+    # Set to false only if you are fine with losing all shares on `helm uninstall`.
+    retain: true
+
+# Persistent storage for uploaded/custom images.
+images:
+  persistence:
+    enabled: true
+    existingClaim: ""
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 1Gi
+    annotations: {}
+    retain: true
+
+# Optional config.yaml.
+#
+# If enabled, the chart renders a Secret and mounts it as
+# /opt/app/config/config.yaml (CONFIG_FILE points at it).
+#
+# A Secret rather than a ConfigMap because this file holds smtp.password,
+# ldap.bindPassword, oauth.*.clientSecret and S3 credentials.
+#
+# Once YAML configuration is used, Pingvin Share X settings are no longer
+# editable through the UI.
+config:
+  enabled: false
+
+  # Use a Secret you manage yourself (SOPS, External Secrets, ...). It must have
+  # a "config.yaml" key. Takes precedence over `data`.
+  existingSecret: ""
+
+  data: {}
+  # Example:
+  #
+  # general:
+  #   appName: Pingvin Share
+  #   appUrl: https://pingvin.example.com
+  #   secureCookies: "true"
+  #
+  # share:
+  #   allowRegistration: "true"
+  #
+  # appearance:
+  #   themePrimaryColor: victoria
+
+# `prisma migrate deploy` and the config seed run before the backend listens, so
+# the startup probe — not a fixed initialDelaySeconds — is what absorbs slow boots.
+startupProbe:
+  enabled: true
+  httpGet:
+    path: /api/health
+    port: api
+  periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 60
+
+# /api/health round-trips to the database, unlike "/" which server-renders the
+# whole index page on every probe.
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /api/health
+    port: api
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 6
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /api/health
+    port: api
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+
+# Extra volumes/mounts, e.g. an emptyDir for a read-only root filesystem.
+extraVolumes: []
+extraVolumeMounts: []
+
+# Sidecars and init containers.
+initContainers: []
+sidecars: []

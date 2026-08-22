@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pingvin-share-x.fullname" . }}
+  labels:
+    {{- include "pingvin-share-x.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  {{- with .Values.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ . }}
+  {{- end }}
+  {{- if eq .Values.service.type "LoadBalancer" }}
+  {{- with .Values.service.loadBalancerIP }}
+  loadBalancerIP: {{ . }}
+  {{- end }}
+  {{- with .Values.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- end }}
+  selector:
+    {{- include "pingvin-share-x.selectorLabels" . | nindent 4 }}
+  ports:
+    {{- /* Caddy is disabled, so the two processes are exposed as separate ports. */}}
+    - name: http
+      port: {{ .Values.service.ports.http }}
+      targetPort: http
+      protocol: TCP
+      {{- if and (has .Values.service.type (list "NodePort" "LoadBalancer")) .Values.service.nodePorts.http }}
+      nodePort: {{ .Values.service.nodePorts.http }}
+      {{- end }}
+    - name: api
+      port: {{ .Values.service.ports.api }}
+      targetPort: api
+      protocol: TCP
+      {{- if and (has .Values.service.type (list "NodePort" "LoadBalancer")) .Values.service.nodePorts.api }}
+      nodePort: {{ .Values.service.nodePorts.api }}
+      {{- end }}

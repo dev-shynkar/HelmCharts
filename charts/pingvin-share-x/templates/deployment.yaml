@@ -1,0 +1,180 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pingvin-share-x.fullname" . }}
+  labels:
+    {{- include "pingvin-share-x.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+
+  strategy:
+    {{- toYaml .Values.updateStrategy | nindent 4 }}
+
+  selector:
+    matchLabels:
+      {{- include "pingvin-share-x.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pingvin-share-x.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- $annotations := deepCopy (.Values.podAnnotations | default dict) }}
+      {{- if and .Values.config.enabled (not .Values.config.existingSecret) }}
+      {{- /* config.yaml is read once at boot, so the pod has to roll when it changes */}}
+      {{- $checksum := include (print $.Template.BasePath "/secret-config.yaml") . | sha256sum }}
+      {{- $_ := set $annotations "checksum/config" $checksum }}
+      {{- end }}
+      {{- with $annotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "pingvin-share-x.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      containers:
+        - name: pingvin-share-x
+          image: {{ include "pingvin-share-x.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+
+          {{/*
+            The image can front both processes with Caddy on :3000, but this chart
+            disables Caddy and exposes them directly. The frontend port is fixed at
+            3333 by the entrypoint; the backend port comes from BACKEND_PORT.
+          */}}
+          ports:
+            - name: http
+              containerPort: {{ .Values.containerPorts.http }}
+              protocol: TCP
+            - name: api
+              containerPort: {{ .Values.containerPorts.api }}
+              protocol: TCP
+
+          env:
+            {{- include "pingvin-share-x.env" . | trim | nindent 12 }}
+
+          {{- with .Values.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          volumeMounts:
+            - name: data
+              mountPath: /opt/app/backend/data
+
+            - name: images
+              mountPath: /opt/app/frontend/public/img
+
+            {{- if and .Values.config.enabled (or .Values.config.data .Values.config.existingSecret) }}
+
+            - name: config
+              mountPath: /opt/app/config
+              readOnly: true
+            {{- end }}
+
+            - name: tmp
+              mountPath: /tmp
+
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          {{- if .Values.startupProbe.enabled }}
+          startupProbe:
+            {{- omit .Values.startupProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            {{- omit .Values.livenessProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            {{- omit .Values.readinessProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+
+        {{- with .Values.sidecars }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+
+      volumes:
+        - name: data
+          {{- if .Values.data.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "pingvin-share-x.dataClaimName" . }}
+          {{- else }}
+          {{- /* Non-persistent: every share is lost when the pod restarts. */}}
+          emptyDir: {}
+          {{- end }}
+
+        - name: images
+          {{- if .Values.images.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "pingvin-share-x.imagesClaimName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+
+        {{- if and .Values.config.enabled (or .Values.config.data .Values.config.existingSecret) }}
+        - name: config
+          secret:
+            secretName: {{ include "pingvin-share-x.configSecretName" . }}
+            {{- /* 256 == 0400. Written in decimal so no YAML parser reads it as 400. */}}
+            defaultMode: 256
+        {{- end }}
+
+        - name: tmp
+          emptyDir: {}
+
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

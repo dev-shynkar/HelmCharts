@@ -1,0 +1,28 @@
+{{- if and .Values.images.persistence.enabled (not .Values.images.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "pingvin-share-x.fullname" . }}-images
+  labels:
+    {{- include "pingvin-share-x.labels" . | nindent 4 }}
+  annotations:
+    {{- if .Values.images.persistence.retain }}
+    helm.sh/resource-policy: keep
+    {{- end }}
+    {{- with .Values.images.persistence.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .Values.images.persistence.accessModes | nindent 4 }}
+  {{- if .Values.images.persistence.storageClass }}
+  {{- if eq .Values.images.persistence.storageClass "-" }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: {{ .Values.images.persistence.storageClass }}
+  {{- end }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.images.persistence.size }}
+{{- end }}

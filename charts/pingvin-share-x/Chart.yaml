@@ -1,0 +1,45 @@
+apiVersion: v2
+name: pingvin-share-x
+description: Helm chart for Pingvin Share X — a self-hosted file sharing platform
+
+type: application
+
+# Bumped from 0.1.0: the chart no longer starts the bundled Caddy reverse proxy
+# and exposes the frontend (3333) and backend (8080) as separate ports.
+# See README.md ("Upgrading from 0.1.x") for the required values changes.
+version: 0.2.0
+appVersion: "1.21.2"
+
+# networking.k8s.io/v1 Ingress requires 1.19+; fsGroupChangePolicy requires 1.20+.
+kubeVersion: ">=1.21.0-0"
+
+home: https://github.com/smp46/pingvin-share-x
+icon: https://raw.githubusercontent.com/smp46/pingvin-share-x/main/frontend/public/img/logo.png
+sources:
+  - https://github.com/smp46/pingvin-share-x
+
+keywords:
+  - filesharing
+  - pingvin
+  - pingvin-share
+  - self-hosted
+
+annotations:
+  artifacthub.io/category: storage
+  artifacthub.io/license: BSD-2-Clause
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/changes: |
+    - kind: fixed
+      description: Serve the frontend (3333) and backend (8080) directly instead of a non-existent port 3000
+    - kind: fixed
+      description: Add the missing ServiceAccount template
+    - kind: fixed
+      description: Use Recreate strategy so upgrades do not deadlock on ReadWriteOnce volumes
+    - kind: fixed
+      description: Probe /api/health instead of rendering the frontend index page
+    - kind: fixed
+      description: Fall back to emptyDir when persistence is disabled
+    - kind: changed
+      description: Store config.yaml in a Secret rather than a ConfigMap
+    - kind: removed
+      description: Drop the non-functional autoscaling values (the app cannot scale horizontally on SQLite)

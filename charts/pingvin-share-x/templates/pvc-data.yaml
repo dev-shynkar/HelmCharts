@@ -1,0 +1,29 @@
+{{- if and .Values.data.persistence.enabled (not .Values.data.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "pingvin-share-x.fullname" . }}-data
+  labels:
+    {{- include "pingvin-share-x.labels" . | nindent 4 }}
+  annotations:
+    {{- /* This volume holds the SQLite DB and every uploaded file. */}}
+    {{- if .Values.data.persistence.retain }}
+    helm.sh/resource-policy: keep
+    {{- end }}
+    {{- with .Values.data.persistence.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .Values.data.persistence.accessModes | nindent 4 }}
+  {{- if .Values.data.persistence.storageClass }}
+  {{- if eq .Values.data.persistence.storageClass "-" }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: {{ .Values.data.persistence.storageClass }}
+  {{- end }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.data.persistence.size }}
+{{- end }}

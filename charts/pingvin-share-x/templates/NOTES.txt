@@ -1,0 +1,56 @@
+{{ .Chart.Name }} {{ .Chart.AppVersion }} has been deployed as "{{ .Release.Name }}".
+
+1. Reach the application:
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}
+{{- end }}
+
+  Uploads are chunked at 10 MB by default. If they fail with HTTP 413 or time
+  out, your ingress controller is limiting the request body — see the annotation
+  examples in values.yaml.
+{{- else if contains "NodePort" .Values.service.type }}
+
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[?(@.name=='http')].nodePort}" services {{ include "pingvin-share-x.fullname" . }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo "http://$NODE_IP:$NODE_PORT"
+
+  NOTE: the API lives on the "api" port of the same Service. Without an Ingress
+  that routes /api to it, the UI will load but every request will fail.
+{{- else if contains "LoadBalancer" .Values.service.type }}
+
+  It may take a few minutes for the LoadBalancer IP to be assigned:
+  kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "pingvin-share-x.fullname" . }}
+{{- else }}
+
+  Port-forward both ports (the frontend calls /api on the same origin):
+
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "pingvin-share-x.fullname" . }} 3000:{{ .Values.service.ports.http }} 8080:{{ .Values.service.ports.api }}
+
+  Then open http://127.0.0.1:3000 — note that /api will NOT be proxied by
+  port-forward, so use an Ingress for anything beyond a smoke test.
+{{- end }}
+
+2. Create the first admin account by visiting /auth/signup — the first user to
+   register becomes the administrator.
+
+{{- if gt (int .Values.replicaCount) 1 }}
+
+WARNING: replicaCount is {{ .Values.replicaCount }}. Pingvin Share X stores its state in SQLite on a
+{{ join ", " .Values.data.persistence.accessModes }} volume and caches in process memory. Running more than one
+replica will corrupt data unless you have also configured Redis caching, S3
+storage and a ReadWriteMany volume.
+{{- end }}
+
+{{- if not .Values.data.persistence.enabled }}
+
+WARNING: data.persistence is disabled. The database and every uploaded file live
+in an emptyDir and will be lost when the pod restarts.
+{{- end }}
+
+{{- if .Values.config.enabled }}
+
+NOTE: config.yaml is active, so settings are no longer editable in the admin UI.
+      Change them through `config.data` (or your existing Secret) and upgrade.
+{{- end }}
