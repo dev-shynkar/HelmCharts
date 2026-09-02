@@ -1,20 +1,59 @@
 apiVersion: v1
 entries:
   duplicati:
-  - apiVersion: v2
+  - annotations:
+      artifacthub.io/category: storage
+      artifacthub.io/changes: |
+        - kind: fixed
+          description: NOTES.txt no longer panics when a values file leaves env empty
+        - kind: fixed
+          description: hostPath /source defaults to type Directory, so a missing path stops the pod instead of producing empty "successful" backups
+        - kind: fixed
+          description: Reject strategy RollingUpdate over a ReadWriteOnce /data claim, which would run two Duplicati processes against one server database
+        - kind: changed
+          description: persistence.config is enabled by default; the server database no longer lives in the container filesystem
+        - kind: changed
+          description: Drop all container capabilities and add back only the six the entrypoint needs, plus seccompProfile RuntimeDefault
+        - kind: added
+          description: commonLabels, commonAnnotations, networkPolicy.allowDNS, persistence.*.hostPathType, configurable helm test pod, and TZ alongside the web-service timezone
+        - kind: fixed
+          description: Remove the duplicated replicas/selector keys that break any strict YAML validation
+        - kind: fixed
+          description: Stop requiring a pre-made Secret with four exact keys; a default install now starts on its own
+        - kind: fixed
+          description: Honour persistence.*.enabled for hostPath volumes, which were mounted regardless
+        - kind: fixed
+          description: Add startup probe so a slow first boot is not killed by liveness after 30 seconds
+        - kind: fixed
+          description: Clear the hardcoded nameOverride/fullnameOverride and template the PVC names
+        - kind: added
+          description: Run as UID/GID instead of root, derive allowed hostnames from the Ingress, resource defaults, PDB, NetworkPolicy and a values schema
+        - kind: removed
+          description: Drop the HorizontalPodAutoscaler; it used autoscaling/v2beta1 and several replicas would corrupt the shared database
+        - kind: removed
+          description: Drop the `namespace` value; it was applied to only two of six templates
+      artifacthub.io/license: MIT
+    apiVersion: v2
     appVersion: 2.3.0.4
-    created: "2026-08-22T09:10:08.689023356Z"
-    description: A Helm chart for duplicati
-    digest: b51dd8489aa8228363f790a0041e308a13b3d69e9c9f3eec5697cb828931762c
-    home: https://github.com/dev-shynkar/HelmCharts/tree/master/duplicati
+    created: "2026-09-02T10:40:32.341101055Z"
+    description: Duplicati backup client - official duplicati/duplicati image
+    digest: 8cb99cf91168f3515520a3a50c8cd835b4fac70fadce327fadd07444b5ca56e6
+    home: https://duplicati.com/
     icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
+    keywords:
+    - duplicati
+    - backup
+    - restore
+    - self-hosted
+    kubeVersion: '>=1.21.0-0'
     name: duplicati
     sources:
+    - https://github.com/duplicati/duplicati
     - https://hub.docker.com/r/duplicati/duplicati
     type: application
     urls:
-    - https://dev-shynkar.github.io/HelmCharts/duplicati-0.18.0.tgz
-    version: 0.18.0
+    - https://dev-shynkar.github.io/HelmCharts/duplicati-0.20.0.tgz
+    version: 0.20.0
   go-ecoflow-exporter:
   - annotations:
       artifacthub.io/category: monitoring
@@ -42,9 +81,9 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 1.6.0
-    created: "2026-08-22T09:10:08.690331061Z"
+    created: "2026-09-02T10:40:32.342054182Z"
     description: Prometheus exporter for EcoFlow devices (remote mode)
-    digest: 408c0d20f700037367bd0ac294d12ce31953629b5b4d84da6855ac8ebfa4d505
+    digest: 7e10b6956fa4f59235095e3dd023e94ab2e19f3910986e754891ffa9aa7d9e53
     home: https://github.com/tess1o/go-ecoflow-exporter
     icon: https://raw.githubusercontent.com/tess1o/go-ecoflow-exporter/main/docs/images/dashboard.png
     keywords:
@@ -85,9 +124,9 @@ entries:
       artifacthub.io/license: BSD-2-Clause
     apiVersion: v2
     appVersion: 1.21.2
-    created: "2026-08-22T09:10:08.691721109Z"
+    created: "2026-09-02T10:40:32.343002462Z"
     description: Helm chart for Pingvin Share X — a self-hosted file sharing platform
-    digest: fc7556e89e092e0286925b7e4099856fdebb95bbea6b2bc80a66a3632e70888a
+    digest: d2ad9319425442497dbf38963e02be71be1d21e73d720b8b12591ec6e412ed45
     home: https://github.com/smp46/pingvin-share-x
     icon: https://raw.githubusercontent.com/smp46/pingvin-share-x/main/frontend/public/img/logo.png
     keywords:
@@ -106,9 +145,9 @@ entries:
   samba:
   - apiVersion: v2
     appVersion: 4.21.4
-    created: "2026-08-22T09:10:08.692190116Z"
+    created: "2026-09-02T10:40:32.343426718Z"
     description: Helm chart for Samba SMB server using crazymax/samba
-    digest: 418f2c17a5a1f1d2f2f05ff2098aaab078485b3f06d20d8bb2bd6d48ebdec84d
+    digest: a2fae7df137819ae38eeeabf3e90fb8ea30995503e40255677883f39ea3964d7
     name: samba
     type: application
     urls:
@@ -135,9 +174,9 @@ entries:
       artifacthub.io/license: GPL-2.0-or-later
     apiVersion: v2
     appVersion: 4.1.3
-    created: "2026-08-22T09:10:08.693100628Z"
+    created: "2026-09-02T10:40:32.34433029Z"
     description: Transmission torrent client - linuxserver.io image
-    digest: 7c9beb40eeb7332ee44fb97a0270755b72b970b0777936dfac94bd6f4758510e
+    digest: d0a853ec8594e374f190d32906bce1c36e18e892c628be663af8a221bff5d5c6
     home: https://github.com/linuxserver/docker-transmission
     icon: https://raw.githubusercontent.com/linuxserver/docker-templates/master/linuxserver.io/img/transmission-icon.png
     keywords:
@@ -155,4 +194,4 @@ entries:
     urls:
     - https://dev-shynkar.github.io/HelmCharts/transmission-0.5.0.tgz
     version: 0.5.0
-generated: "2026-08-22T09:10:08.686675569Z"
+generated: "2026-09-02T10:40:32.338942369Z"
