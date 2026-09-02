@@ -1,0 +1,35 @@
+{{- $p := .Values.persistence.config }}
+{{- if and $p.enabled (not $p.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "duplicati.configClaimName" . }}
+  labels:
+    {{- include "duplicati.labels" . | nindent 4 }}
+  {{- /*
+    Server database, backup definitions and encryption passphrases.
+    retain wins over anything commonAnnotations sets on the same key, so
+    keeping the volume can never be switched off by accident.
+  */}}
+  {{- $ann := merge (dict) ($p.annotations | default dict) (.Values.commonAnnotations | default dict) }}
+  {{- if $p.retain }}
+  {{- $_ := set $ann "helm.sh/resource-policy" "keep" }}
+  {{- end }}
+  {{- with $ann }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  accessModes:
+    {{- toYaml $p.accessModes | nindent 4 }}
+  {{- if $p.storageClassName }}
+  {{- if eq $p.storageClassName "-" }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: {{ $p.storageClassName }}
+  {{- end }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $p.size }}
+{{- end }}

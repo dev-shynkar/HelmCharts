@@ -21,3 +21,7 @@
 .idea/
 *.tmproj
 .vscode/
+
+# Chart.yaml `icon:` points at the copy on GitHub, so the local PNG is only
+# dead weight inside the packaged chart.
+images/

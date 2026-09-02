@@ -1,22 +1,126 @@
-1. Get the application URL by running these commands:
+{{- /*
+  .Values.env is read in several places below. A values file that clears it
+  ("env:" with nothing under it) makes it nil, and nil.UID is a render-time
+  panic, so bind a guarded copy once — same trick as the duplicati.env helper.
+*/ -}}
+{{- $env := .Values.env | default dict -}}
+{{- /* Sections 3-5 are conditional, so number them at render time. */ -}}
+{{- $n := 0 -}}
+Duplicati {{ .Chart.AppVersion }} deployed as "{{ .Release.Name }}".
+
+{{ $n = add1 $n }}{{ $n }}. Open the web UI:
 {{- if .Values.ingress.enabled }}
 {{- range $host := .Values.ingress.hosts }}
-  {{- range .paths }}
-  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
-  {{- end }}
+
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}
 {{- end }}
-{{- else if contains "NodePort" .Values.service.type }}
-  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "duplicati.fullname" . }})
-  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
-  echo http://$NODE_IP:$NODE_PORT
-{{- else if contains "LoadBalancer" .Values.service.type }}
-     NOTE: It may take a few minutes for the LoadBalancer IP to be available.
-           You can watch the status of by running 'kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "duplicati.fullname" . }}'
-  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "duplicati.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
-  echo http://$SERVICE_IP:{{ .Values.service.port }}
-{{- else if contains "ClusterIP" .Values.service.type }}
-  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "duplicati.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
-  export CONTAINER_PORT=$(kubectl get pod --namespace {{ .Release.Namespace }} $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
-  echo "Visit http://127.0.0.1:8080 to use your application"
-  kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:$CONTAINER_PORT
+{{- else }}
+
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "duplicati.fullname" . }} 8200:{{ .Values.service.port }}
+  # then http://localhost:8200
+{{- end }}
+
+{{- if not (hasKey $env "DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES") }}
+
+   Duplicati refuses requests with an unrecognised Host header. The chart set
+   DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES for you:
+
+     {{ include "duplicati.allowedHostnames" . }}
+
+   Reaching the UI by any other name gives an error page, not a 404. Add that
+   name to `env.DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES` (semicolon separated).
+{{- end }}
+
+{{- if not .Values.auth.existingSecret }}
+
+{{ $n = add1 $n }}{{ $n }}. WARNING: no credentials configured.
+
+   * The UI has no password yet. Duplicati prints a one-time sign-in link in the
+     pod log — find it with:
+
+       kubectl --namespace {{ .Release.Namespace }} logs deploy/{{ include "duplicati.fullname" . }} | grep -i signin
+
+   * The server database is NOT encrypted, so every backend credential you enter
+     is stored in the clear on the config volume.
+
+   Fix both:
+
+     kubectl create secret generic duplicati-secret -n {{ .Release.Namespace }} \
+       --from-literal=DUPLICATI__WEBSERVICE_PASSWORD='<ui password>' \
+       --from-literal=SETTINGS_ENCRYPTION_KEY="$(openssl rand -base64 32)"
+
+     # then: auth.existingSecret=duplicati-secret
+
+   Keep SETTINGS_ENCRYPTION_KEY somewhere safe and OUTSIDE these backups —
+   without it the server database cannot be read again.
+{{- else }}
+
+{{ $n = add1 $n }}{{ $n }}. Credentials come from the Secret "{{ .Values.auth.existingSecret }}".
+   Required keys:
+{{- if .Values.auth.keys.password }}
+     {{ .Values.auth.keys.password }}
+{{- end }}
+{{- if .Values.auth.keys.encryptionKey }}
+     {{ .Values.auth.keys.encryptionKey }}
+{{- else }}
+
+   NOTE: auth.keys.encryptionKey is blank, so the server database is stored
+   unencrypted along with every backend credential in it.
+{{- end }}
+
+   Changing a value in that Secret does NOT restart the pod: the variables are
+   read once at startup. The chart cannot checksum a Secret it does not own
+   without `lookup`, which breaks `helm template`, so after rotating either key:
+
+     kubectl --namespace {{ .Release.Namespace }} rollout restart deploy/{{ include "duplicati.fullname" . }}
+{{- end }}
+
+{{- if not .Values.persistence.config.enabled }}
+
+{{ $n = add1 $n }}{{ $n }}. WARNING: persistence.config is disabled.
+
+   /data holds the server database: your backup definitions, schedules and
+   encryption passphrases. It is currently in the container filesystem and is
+   lost on every restart — the backup files themselves survive, but restoring
+   from them means rebuilding the configuration and remembering the passphrase
+   by hand. Enable it:
+
+     persistence:
+       config:
+         enabled: true
+         size: 1Gi
+{{- end }}
+
+{{- if and .Values.persistence.source.enabled (eq .Values.persistence.source.type "hostPath") }}
+
+{{ $n = add1 $n }}{{ $n }}. /source is a hostPath ({{ .Values.persistence.source.hostPath }}) of type {{ .Values.persistence.source.hostPathType | default "Directory" }}
+   on the node your nodeSelector picked, mounted {{ if .Values.persistence.source.readOnly }}read-only{{ else }}READ-WRITE — consider persistence.source.readOnly: true{{ end }}.
+
+   Verify it actually contains your data before trusting the first backup:
+
+     kubectl --namespace {{ .Release.Namespace }} exec deploy/{{ include "duplicati.fullname" . }} -- ls -la /source
+
+   An empty directory here means Duplicati will record an empty backup as a
+   successful version, and retention will start pruning the good ones.
+{{- if ne (.Values.persistence.source.hostPathType | default "Directory") "Directory" }}
+
+   hostPathType is not Directory, so the kubelet creates that directory when it
+   is missing instead of refusing to start the pod. That is the exact failure
+   above. Consider persistence.source.hostPathType: Directory.
+{{- end }}
+{{- end }}
+
+{{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.ingressFrom) }}
+
+{{ $n = add1 $n }}{{ $n }}. NOTE: networkPolicy is enabled but networkPolicy.ingressFrom is empty.
+
+   A rule with ports and no `from` matches every source in the cluster, so port
+   8200 is still reachable from any pod in any namespace. List the callers that
+   are actually allowed if you meant to restrict it.
+{{- end }}
+
+{{- if eq ($env.UID | default "") "" }}
+
+WARNING: env.UID is not set, so the entrypoint leaves Duplicati running as root
+and everything it writes will be root-owned.
 {{- end }}

@@ -1,169 +1,188 @@
+{{- include "duplicati.validate" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "duplicati.fullname" . }}
-  namespace: {{ .Values.namespace }}
   labels:
     {{- include "duplicati.labels" . | nindent 4 }}
-spec:
-  {{- if not .Values.autoscaling.enabled }}
-  replicas: {{ .Values.replicaCount }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
   {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+
   strategy:
     {{- toYaml .Values.strategy | nindent 4 }}
-  selector:
-    matchLabels:
-      {{- include "duplicati.selectorLabels" . | nindent 6 }}
-  {{- if not .Values.autoscaling.enabled }}
-  replicas: {{ .Values.replicaCount }}
-  {{- end }}
+
   selector:
     matchLabels:
       {{- include "duplicati.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
+      labels:
+        {{- include "duplicati.selectorLabels" . | nindent 8 }}
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- /* podAnnotations wins over commonAnnotations on a shared key. */}}
+      {{- $ann := merge (dict) (.Values.podAnnotations | default dict) (.Values.commonAnnotations | default dict) }}
+      {{- with $ann }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      labels:
-        {{- include "duplicati.selectorLabels" . | nindent 8 }}
     spec:
+      serviceAccountName: {{ include "duplicati.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "duplicati.serviceAccountName" . }}
+
+      {{- with .Values.podSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
       containers:
         - name: {{ .Chart.Name }}
-          securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: {{ include "duplicati.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
           ports:
             - name: http
               containerPort: 8200
               protocol: TCP
+
           env:
-            {{- range .Values.env }}
-            - name: {{ .name }}
-              value: {{ .value | quote }}
-            {{- end }}
-            {{- range .Values.envFrom }}
-            {{- if .secretRef }}
-            - name: {{ .name }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .secretRef.name }}
-                  key: {{ .secretRef.key }}
-            {{- end }}
-            {{- if .configMapRef }}
-            - name: {{ .name }}
-              valueFrom:
-                configMapKeyRef:
-                  name: {{ .configMapRef.name }}
-                  key: {{ .configMapRef.key }}
-            {{- end }}
-            {{- end }}
-            {{- with .Values.envFromSecret }}
-            {{- if .secretName }}
-            - name: {{ .passwordEnvName | default "DUPLICATI__WEBSERVICE_PASSWORD" }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .secretName }}
-                  key: {{ .passwordKey | default "DUPLICATI__WEBSERVICE_PASSWORD" }}
-            - name: {{ .hostnamesEnvName | default "DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES" }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .secretName }}
-                  key: {{ .hostnamesKey | default "DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES" }}
-            - name: {{ .encryptionKeyEnvName | default "SETTINGS_ENCRYPTION_KEY" }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .secretName }}
-                  key: {{ .encryptionKeyKey | default "SETTINGS_ENCRYPTION_KEY" }}
-            - name: {{ .timezoneEnvName | default "DUPLICATI__WEBSERVICE_TIMEZONE" }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .secretName }}
-                  key: {{ .timezoneKey | default "DUPLICATI__WEBSERVICE_TIMEZONE" }}
-            {{- end }}
-            {{- end }}
-          livenessProbe:
-            httpGet:
-              path: /
-              port: http
-          readinessProbe:
-            httpGet:
-              path: /
-              port: http
-          resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            {{- include "duplicati.env" . | trim | nindent 12 }}
+
+          {{- with .Values.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
           volumeMounts:
             {{- if .Values.persistence.config.enabled }}
             - name: config
               mountPath: /data
             {{- end }}
-            {{- if or .Values.persistence.source.enabled .Values.persistence.source.existingClaim (eq .Values.persistence.source.type "hostPath") }}
+            {{- if .Values.persistence.source.enabled }}
             - name: source
               mountPath: /source
-              readOnly: {{ .Values.persistence.source.readOnly | default false }}
+              readOnly: {{ .Values.persistence.source.readOnly }}
             {{- end }}
-            {{- if or .Values.persistence.backups.enabled .Values.persistence.backups.existingClaim (eq .Values.persistence.backups.type "hostPath") }}
+            {{- if .Values.persistence.backups.enabled }}
             - name: backups
               mountPath: /backups
-              readOnly: {{ .Values.persistence.backups.readOnly | default false }}
+              readOnly: {{ .Values.persistence.backups.readOnly }}
             {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- if .Values.startupProbe.enabled }}
+          startupProbe:
+            {{- omit .Values.startupProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            {{- omit .Values.readinessProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            {{- omit .Values.livenessProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+
+        {{- with .Values.sidecars }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+
       volumes:
-        {{- /* Config volume - завжди PVC */ -}}
         {{- if .Values.persistence.config.enabled }}
+        {{- /* Config is always a PVC — /data must survive restarts. */}}
         - name: config
           persistentVolumeClaim:
-            claimName: pvc-duplicati-config
+            claimName: {{ include "duplicati.configClaimName" . }}
         {{- end }}
 
-        {{- /* Source volume */ -}}
-        {{- if .Values.persistence.source.existingClaim }}
+        {{- if .Values.persistence.source.enabled }}
         - name: source
-          persistentVolumeClaim:
-            claimName: {{ .Values.persistence.source.existingClaim }}
-        {{- else if eq .Values.persistence.source.type "hostPath" }}
-        - name: source
+          {{- if eq .Values.persistence.source.type "hostPath" }}
           hostPath:
             path: {{ .Values.persistence.source.hostPath }}
-            type: DirectoryOrCreate
-        {{- else if .Values.persistence.source.enabled }}
-        - name: source
+            {{- /*
+              Directory by default: an auto-created empty directory here means
+              Duplicati backs up nothing, records a successful version, and
+              retention prunes the versions that held real data.
+            */}}
+            type: {{ .Values.persistence.source.hostPathType | default "Directory" }}
+          {{- else }}
           persistentVolumeClaim:
-            claimName: pvc-duplicati-source
+            claimName: {{ include "duplicati.sourceClaimName" . }}
+          {{- end }}
         {{- end }}
 
-        {{- /* Backups volume */ -}}
-        {{- if .Values.persistence.backups.existingClaim }}
+        {{- if .Values.persistence.backups.enabled }}
         - name: backups
-          persistentVolumeClaim:
-            claimName: {{ .Values.persistence.backups.existingClaim }}
-        {{- else if eq .Values.persistence.backups.type "hostPath" }}
-        - name: backups
+          {{- if eq .Values.persistence.backups.type "hostPath" }}
           hostPath:
             path: {{ .Values.persistence.backups.hostPath }}
-            type: DirectoryOrCreate
-        {{- else if .Values.persistence.backups.enabled }}
-        - name: backups
+            type: {{ .Values.persistence.backups.hostPathType | default "DirectoryOrCreate" }}
+          {{- else }}
           persistentVolumeClaim:
-            claimName: pvc-duplicati-backups
+            claimName: {{ include "duplicati.backupsClaimName" . }}
+          {{- end }}
         {{- end }}
+
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+
       {{- with .Values.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+
       {{- with .Values.tolerations }}
       tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}

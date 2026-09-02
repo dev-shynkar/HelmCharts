@@ -1,10 +1,63 @@
 apiVersion: v2
-appVersion: 2.3.0.4
-description: A Helm chart for duplicati
-home: https://github.com/dev-shynkar/HelmCharts/tree/master/duplicati
-icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
 name: duplicati
-sources:
-- https://hub.docker.com/r/duplicati/duplicati
+description: Duplicati backup client - official duplicati/duplicati image
 type: application
-version: 0.18.0
+
+# 0.20.0 changes three defaults and drops container capabilities. No resource
+# name changes, and nothing about PVC naming, existingClaim, claimName or
+# retain moves — see README.md ("Upgrading from 0.19.x") for the three.
+#
+# 0.19.0 fixed the duplicated replicas/selector keys, the fresh install that
+# could not start without a pre-made Secret, and the HPA on an API removed in
+# Kubernetes 1.26.
+# See README.md ("Upgrading from 0.18.x") — resource names change there.
+version: 0.20.0
+appVersion: "2.3.0.4"
+
+kubeVersion: ">=1.21.0-0"
+
+home: https://duplicati.com/
+icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
+sources:
+  - https://github.com/duplicati/duplicati
+  - https://hub.docker.com/r/duplicati/duplicati
+
+keywords:
+  - duplicati
+  - backup
+  - restore
+  - self-hosted
+
+
+annotations:
+  artifacthub.io/category: storage
+  artifacthub.io/license: MIT
+  artifacthub.io/changes: |
+    - kind: fixed
+      description: NOTES.txt no longer panics when a values file leaves env empty
+    - kind: fixed
+      description: hostPath /source defaults to type Directory, so a missing path stops the pod instead of producing empty "successful" backups
+    - kind: fixed
+      description: Reject strategy RollingUpdate over a ReadWriteOnce /data claim, which would run two Duplicati processes against one server database
+    - kind: changed
+      description: persistence.config is enabled by default; the server database no longer lives in the container filesystem
+    - kind: changed
+      description: Drop all container capabilities and add back only the six the entrypoint needs, plus seccompProfile RuntimeDefault
+    - kind: added
+      description: commonLabels, commonAnnotations, networkPolicy.allowDNS, persistence.*.hostPathType, configurable helm test pod, and TZ alongside the web-service timezone
+    - kind: fixed
+      description: Remove the duplicated replicas/selector keys that break any strict YAML validation
+    - kind: fixed
+      description: Stop requiring a pre-made Secret with four exact keys; a default install now starts on its own
+    - kind: fixed
+      description: Honour persistence.*.enabled for hostPath volumes, which were mounted regardless
+    - kind: fixed
+      description: Add startup probe so a slow first boot is not killed by liveness after 30 seconds
+    - kind: fixed
+      description: Clear the hardcoded nameOverride/fullnameOverride and template the PVC names
+    - kind: added
+      description: Run as UID/GID instead of root, derive allowed hostnames from the Ingress, resource defaults, PDB, NetworkPolicy and a values schema
+    - kind: removed
+      description: Drop the HorizontalPodAutoscaler; it used autoscaling/v2beta1 and several replicas would corrupt the shared database
+    - kind: removed
+      description: Drop the `namespace` value; it was applied to only two of six templates

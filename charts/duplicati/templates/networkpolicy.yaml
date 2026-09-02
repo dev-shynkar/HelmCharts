@@ -1,0 +1,58 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "duplicati.fullname" . }}
+  labels:
+    {{- include "duplicati.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "duplicati.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    {{- /*
+      Only declare Egress when rules are given: an empty Egress policyType
+      denies all outbound traffic, and Duplicati would lose DNS along with
+      access to whatever backup backend it uses.
+    */}}
+    {{- if .Values.networkPolicy.egress }}
+    - Egress
+    {{- end }}
+  ingress:
+    {{- /*
+      An ingress rule with ports but no `from` matches every source in the
+      cluster. With ingressFrom empty this policy therefore restricts the port
+      number and nothing else — see the warning in values.yaml.
+    */}}
+    - ports:
+        - port: 8200
+          protocol: TCP
+      {{- with .Values.networkPolicy.ingressFrom }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- with .Values.networkPolicy.egress }}
+  egress:
+    {{- toYaml . | nindent 4 }}
+    {{- /*
+      Only appended alongside real egress rules. On its own it would be the
+      single rule under an Egress policyType, which denies everything else.
+    */}}
+    {{- if $.Values.networkPolicy.allowDNS }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    {{- end }}
+  {{- end }}
+{{- end }}

@@ -1,131 +1,352 @@
-# Default values for duplicati.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
+# Duplicati, using the official duplicati/duplicati image.
+#
+# Note this is NOT the linuxserver.io image: the official one takes UID/GID
+# (not PUID/PGID) and keeps its configuration in /data (XDG_CONFIG_HOME).
 
+# /data holds the server database on a ReadWriteOnce volume. A second replica
+# would write to the same SQLite file and corrupt it, so there is deliberately
+# no autoscaling in this chart.
 replicaCount: 1
 
+# The new pod cannot attach the ReadWriteOnce volume while the old one holds it.
 strategy:
   type: Recreate
+
+revisionHistoryLimit: 3
+
+# Let a running backup wind down instead of being killed at 30s.
+terminationGracePeriodSeconds: 120
 
 image:
   repository: duplicati/duplicati
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
+  # Defaults to Chart.AppVersion, which tracks the current stable release.
   tag: ""
+  # Takes precedence over tag, e.g. "sha256:abc123...".
+  digest: ""
 
 imagePullSecrets: []
-nameOverride: "duplicati"
-fullnameOverride: "duplicati"
 
-# Specifies namespace where to live
-namespace: ""
+nameOverride: ""
+fullnameOverride: ""
+
+# Labels and annotations added to every object this chart renders.
+#
+# commonLabels deliberately does NOT reach the selector labels
+# (app.kubernetes.io/name + app.kubernetes.io/instance). A Deployment selector
+# is immutable, so folding arbitrary labels into it would break every upgrade
+# of an existing release.
+commonLabels: {}
+commonAnnotations: {}
 
 serviceAccount:
-  # Specifies whether a service account should be created
   create: true
-  # Annotations to add to the service account
+  # Duplicati never talks to the Kubernetes API.
+  automount: false
   annotations: {}
-  # The name of the service account to use.
-  # If not set and create is true, a name is generated using the fullname template
   name: ""
 
 podAnnotations: {}
+podLabels: {}
 
-podSecurityContext: {}
-  # fsGroup: 2000
+# Applies to every container in the pod. RuntimeDefault does not conflict with
+# the root entrypoint below.
+podSecurityContext:
+  seccompProfile:
+    type: RuntimeDefault
 
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+# The image entrypoint (run-as-user.sh) starts as root, chowns /data and
+# /opt/duplicati to UID:GID, then drops privileges with `su`. That initial chown
+# is why runAsNonRoot cannot be set here — see env.UID / env.GID below.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+
+  # Drop everything, then add back only what run-as-user.sh actually uses:
+  #   CHOWN, FOWNER, DAC_OVERRIDE  chown /data and /opt/duplicati to UID:GID
+  #   SETUID, SETGID               drop privileges with su
+  #   AUDIT_WRITE                  su on this Debian-based image goes through
+  #                                PAM, which writes an audit record; without
+  #                                this capability su fails on some kernels
+  #
+  # allowPrivilegeEscalation: false is safe alongside su: the process is
+  # already root and moves DOWN to UID:GID, which needs SETUID, not the setuid
+  # bit. If the pod ever crashloops at start, comment out `capabilities` — do
+  # not go back to running as root instead.
+  capabilities:
+    drop:
+      - ALL
+    add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+      - AUDIT_WRITE
 
 service:
   type: ClusterIP
   port: 8200
-  # ClusterIP or LoadBalancer  
+  annotations: {}
+  nodePort: ""
 
 ingress:
   enabled: false
   className: ""
   annotations: {}
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
   hosts:
-    - host: chart-example.local
+    - host: duplicati.example.com
       paths:
         - path: /
-          pathType: ImplementationSpecific
+          pathType: Prefix
   tls: []
-  #  - secretName: chart-example-tls
+  #  - secretName: duplicati-tls
   #    hosts:
-  #      - chart-example.local
+  #      - duplicati.example.com
 
-resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+# Backups compress and deduplicate, which costs real memory — a large source
+# tree with a small block size can push well past the request.
+#
+# The 2Gi limit is a homelab default, not a safe universal one: hitting it gets
+# the pod OOMKilled in the middle of a backup, and the next run restarts the
+# volume from scratch. If your source is large, raise the limit before trusting
+# the schedule.
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "2000m"
+    memory: 2Gi
 
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 100
-  targetCPUUtilizationPercentage: 80
-  # targetMemoryUtilizationPercentage: 80
+# Credentials.
+#
+# Leave existingSecret empty and the chart adds no secret references at all, so
+# a default install starts cleanly. Duplicati then prints a one-time sign-in
+# link in the pod log and leaves its settings database unencrypted.
+#
+#   kubectl create secret generic duplicati-secret \
+#     --from-literal=DUPLICATI__WEBSERVICE_PASSWORD='<ui password>' \
+#     --from-literal=SETTINGS_ENCRYPTION_KEY='<long random key>'
+#
+# SETTINGS_ENCRYPTION_KEY is NOT the UI password: it encrypts the server
+# database so that backend credentials are not stored in the clear. Losing it
+# means losing access to that database, so keep a copy somewhere safe.
+auth:
+  existingSecret: ""
+  # Both keys must exist in the Secret. Blank one out to skip that variable.
+  keys:
+    password: DUPLICATI__WEBSERVICE_PASSWORD
+    encryptionKey: SETTINGS_ENCRYPTION_KEY
+
+# Environment variables.
+#
+# UID/GID make the entrypoint drop root. Remove them only if you know why you
+# want Duplicati running as root.
+#
+# DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES is computed automatically from the
+# Service name plus every Ingress host (Duplicati rejects requests with an
+# unrecognised Host header, which is the usual reason the UI will not open
+# behind an Ingress). Set it here to take over — "*" disables the check
+# entirely, which upstream does not recommend.
+env:
+  UID: "1000"
+  GID: "1000"
+  # DUPLICATI__WEBSERVICE_TIMEZONE only shifts what the web UI displays. TZ sets
+  # the container clock, so log lines and file timestamps stop being UTC. Keep
+  # the two in sync.
+  TZ: "Europe/Kyiv"
+  DUPLICATI__WEBSERVICE_TIMEZONE: "Europe/Kyiv"
+  # DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES: "duplicati.example.com;localhost"
+
+# Extra variables in list form (supports valueFrom).
+extraEnv: []
+# - name: DUPLICATI__SEND_HTTP_URL
+#   value: https://hooks.example.com/duplicati
+
+# Standard Kubernetes envFrom — whole Secrets or ConfigMaps at once.
+envFrom: []
+# - secretRef:
+#     name: duplicati-backend-credentials
 
 persistence:
+  # /data — server database, backup definitions, schedules, encryption
+  # passphrases. Losing it loses the ability to restore conveniently, even
+  # though the backup files themselves survive.
+  #
+  # On by default since 0.20.0. Turning it off puts /data in the container
+  # filesystem, where every restart wipes it.
   config:
-    enabled: false
+    enabled: true
+
+    # A volume this chart does NOT manage — mounted only, never created and
+    # never deleted. Do not use it to point at a PVC an earlier version of this
+    # chart created: dropping that PVC out of the release manifest makes Helm
+    # delete it on the next upgrade. Use claimName for that.
+    existingClaim: ""
+
+    # Name of the PVC this chart creates and manages.
+    # Default: <fullname>-config.
+    # Chart 0.18.x named it "pvc-duplicati-config" — set that here to keep the
+    # volume you already have. See README ("Upgrading from 0.18.x").
+    claimName: ""
+
     storageClassName: ""
+    accessModes:
+      - ReadWriteOnce
     size: "1Gi"
-    
+    annotations: {}
+    retain: true
+
+  # /source — what you back up. Mounted read-only by default: Duplicati only
+  # ever needs to read it, and a read-only mount removes a whole class of
+  # accidents.
   source:
     enabled: false
-    existingClaim: ""
-    # Volume type: "pvc" or "hostPath"
+    # pvc | hostPath
+    #
+    # hostPath ties the data to one node, so the chart refuses to render unless
+    # nodeSelector or affinity is set. This matters more here than elsewhere:
+    # if the pod moves, DirectoryOrCreate makes an empty directory, Duplicati
+    # backs up nothing, records it as a successful version, and your retention
+    # policy then starts deleting the versions that had real data in them.
     type: "pvc"
-    # For PVC
-    accessMode: "ReadWriteOnce"
-    size: "10Gi"
-    storageClassName: ""
-    # For hostPath
+    # See the notes on existingClaim vs claimName under config above.
+    existingClaim: ""
+    # 0.18.x used "pvc-duplicati-source".
+    claimName: ""
     hostPath: "/mnt/data/source"
+
+    # Directory: the pod refuses to start if hostPath does not exist.
+    # DirectoryOrCreate: the kubelet creates an empty directory instead.
+    #
+    # Default Directory, because the empty-directory case is exactly the
+    # failure described above — Duplicati would back up nothing, record it as a
+    # successful version, and retention would prune the versions that held real
+    # data. Note this catches a wrong path or a missing directory, but NOT a
+    # disk that failed to mount after a reboot: the mount point is then a real
+    # (empty) directory. For that, add an initContainer that checks for a
+    # marker file.
+    hostPathType: Directory
+
     readOnly: true
-    
+    storageClassName: ""
+    accessModes:
+      - ReadWriteOnce
+    size: "10Gi"
+    annotations: {}
+    retain: true
+
+  # /backups — a local backup destination, if you use one rather than a remote
+  # backend (S3, B2, rclone, ...).
   backups:
     enabled: false
-    existingClaim: ""
-    # Volume type: "pvc" or "hostPath"
     type: "pvc"
-    # For PVC
-    accessMode: "ReadWriteOnce"
-    size: "50Gi"
-    storageClassName: ""
-    # For hostPath
+    existingClaim: ""
+    # 0.18.x used "pvc-duplicati-backups".
+    claimName: ""
     hostPath: "/mnt/data/backups"
 
+    # DirectoryOrCreate here, unlike source: a backup destination legitimately
+    # does not exist yet on the first deploy. Set Directory if you would rather
+    # create it yourself.
+    hostPathType: DirectoryOrCreate
+
+    readOnly: false
+    storageClassName: ""
+    accessModes:
+      - ReadWriteOnce
+    size: "50Gi"
+    annotations: {}
+    retain: true
+
+# First boot runs database migrations, so give it room rather than letting
+# liveness kill the pod after ~30 seconds.
+startupProbe:
+  enabled: true
+  httpGet:
+    path: /
+    port: http
+    httpHeaders:
+      - name: Host
+        value: localhost
+  periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 60
+
+# httpGet sends Host: localhost on purpose. The kubelet would otherwise use the
+# pod IP, which Duplicati's allowed-hostnames check can reject; "localhost" is
+# always in the computed list.
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /
+    port: http
+    httpHeaders:
+      - name: Host
+        value: localhost
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Deliberately a plain TCP check: a restart aborts whatever backup is running,
+# so liveness should only ever fire for a genuinely dead process, never because
+# of an HTTP detail like a rejected Host header.
+livenessProbe:
+  enabled: true
+  tcpSocket:
+    port: http
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 5
+
+podDisruptionBudget:
+  # Off by default: with a single replica a PDB would block node drains.
+  enabled: false
+  minAvailable: ""
+  maxUnavailable: 1
+
+networkPolicy:
+  enabled: false
+
+  # WARNING: an empty list means "from anywhere". A NetworkPolicy ingress rule
+  # with ports but no `from` matches every source in the cluster, so enabling
+  # the policy with ingressFrom: [] restricts the port number and nothing else.
+  # List the callers that are actually allowed:
+  #
+  #   ingressFrom:
+  #     - namespaceSelector:
+  #         matchLabels:
+  #           kubernetes.io/metadata.name: ingress-nginx
+  ingressFrom: []
+
+  # Egress stays completely unrestricted while this list is empty — the chart
+  # does not even declare the Egress policyType, because declaring it with no
+  # rules would deny all outbound traffic.
+  #
+  # The moment you add one rule, everything else is denied, DNS included.
+  egress: []
+
+  # Appends a DNS rule (kube-system :53 UDP+TCP) to the egress list above.
+  # Ignored while egress is empty, since egress is unrestricted anyway.
+  allowDNS: true
+
+# Required when any persistence type is hostPath.
 nodeSelector: {}
+# kubernetes.io/hostname: k3s-node-1
 
 tolerations: []
-
 affinity: {}
+topologySpreadConstraints: []
+priorityClassName: ""
 
-envFromSecret:
-  secretName: duplicati-secret
-  passwordEnvName: DUPLICATI__WEBSERVICE_PASSWORD
-  passwordKey: DUPLICATI__WEBSERVICE_PASSWORD
-  hostnamesEnvName: DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES
-  hostnamesKey: DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES
-  encryptionKeyEnvName: SETTINGS_ENCRYPTION_KEY
-  encryptionKeyKey: SETTINGS_ENCRYPTION_KEY
-  timezoneEnvName: DUPLICATI__WEBSERVICE_TIMEZONE
-  timezoneKey: DUPLICATI__WEBSERVICE_TIMEZONE
+extraVolumes: []
+extraVolumeMounts: []
+initContainers: []
+sidecars: []
+
+# The `helm test` pod.
+tests:
+  image: busybox:1.36
+  # Empty means env.UID, falling back to 1000.
+  runAsUser: ""
