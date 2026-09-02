@@ -35,9 +35,9 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 2.3.0.4
-    created: "2026-09-02T10:40:32.341101055Z"
+    created: "2026-09-02T10:52:14.041732102Z"
     description: Duplicati backup client - official duplicati/duplicati image
-    digest: 8cb99cf91168f3515520a3a50c8cd835b4fac70fadce327fadd07444b5ca56e6
+    digest: 8a4dfac3c3a4e8fbb40fb28a03418e9d4b8fd5b44ea8df180c298166f49e14eb
     home: https://duplicati.com/
     icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
     keywords:
@@ -81,9 +81,9 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 1.6.0
-    created: "2026-09-02T10:40:32.342054182Z"
+    created: "2026-09-02T10:52:14.0424948Z"
     description: Prometheus exporter for EcoFlow devices (remote mode)
-    digest: 7e10b6956fa4f59235095e3dd023e94ab2e19f3910986e754891ffa9aa7d9e53
+    digest: 9d7d63984758e47c70b76237e58030cb9a8454bc0b36bbbbb4382612d3cc200d
     home: https://github.com/tess1o/go-ecoflow-exporter
     icon: https://raw.githubusercontent.com/tess1o/go-ecoflow-exporter/main/docs/images/dashboard.png
     keywords:
@@ -124,9 +124,9 @@ entries:
       artifacthub.io/license: BSD-2-Clause
     apiVersion: v2
     appVersion: 1.21.2
-    created: "2026-09-02T10:40:32.343002462Z"
+    created: "2026-09-02T10:52:14.043236356Z"
     description: Helm chart for Pingvin Share X — a self-hosted file sharing platform
-    digest: d2ad9319425442497dbf38963e02be71be1d21e73d720b8b12591ec6e412ed45
+    digest: 10235592a2de3a7cc2d2072ac383bb29f04a73397b22588e4bb9b78520f36b26
     home: https://github.com/smp46/pingvin-share-x
     icon: https://raw.githubusercontent.com/smp46/pingvin-share-x/main/frontend/public/img/logo.png
     keywords:
@@ -145,9 +145,9 @@ entries:
   samba:
   - apiVersion: v2
     appVersion: 4.21.4
-    created: "2026-09-02T10:40:32.343426718Z"
+    created: "2026-09-02T10:52:14.043579883Z"
     description: Helm chart for Samba SMB server using crazymax/samba
-    digest: a2fae7df137819ae38eeeabf3e90fb8ea30995503e40255677883f39ea3964d7
+    digest: 9803e81c973e266bcb3d448aab2299f238c7f11be88458ebfcc9394ba6656df3
     name: samba
     type: application
     urls:
@@ -174,9 +174,9 @@ entries:
       artifacthub.io/license: GPL-2.0-or-later
     apiVersion: v2
     appVersion: 4.1.3
-    created: "2026-09-02T10:40:32.34433029Z"
+    created: "2026-09-02T10:52:14.04424785Z"
     description: Transmission torrent client - linuxserver.io image
-    digest: d0a853ec8594e374f190d32906bce1c36e18e892c628be663af8a221bff5d5c6
+    digest: 660ca20296ae4e69661708073ce12c1228897871152c8f100dad268b4a5f6a74
     home: https://github.com/linuxserver/docker-transmission
     icon: https://raw.githubusercontent.com/linuxserver/docker-templates/master/linuxserver.io/img/transmission-icon.png
     keywords:
@@ -194,4 +194,4 @@ entries:
     urls:
     - https://dev-shynkar.github.io/HelmCharts/transmission-0.5.0.tgz
     version: 0.5.0
-generated: "2026-09-02T10:40:32.338942369Z"
+generated: "2026-09-02T10:52:14.040085814Z"
