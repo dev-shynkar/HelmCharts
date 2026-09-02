@@ -35,14 +35,20 @@ helm.sh/chart: {{ include "transmission.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- with .Values.commonLabels }}
+{{ toYaml . }}
+{{- end }}
 {{- end }}
 
 {{/*
 Selector labels.
 
-`app` is kept alongside the standard labels for backwards compatibility with
-0.3.x, but it is no longer the only thing identifying the pods — that was what
-let two releases claim each other's pods.
+`app` is kept on the pod template for backwards compatibility with 0.3.x, but it
+is deliberately NOT here — being the only thing identifying the pods was what let
+two releases claim each other's.
+
+commonLabels must never reach these either: a Deployment's spec.selector is
+immutable, so any change here turns every later upgrade into a hard failure.
 */}}
 {{- define "transmission.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "transmission.name" . }}
@@ -89,15 +95,30 @@ PVC names. Three cases, in priority order:
 {{- include "transmission.claimName" (dict "ctx" . "vol" "downloads") -}}
 {{- end }}
 
+{{- /*
+  watch has no size/accessModes of its own — the chart never creates that PVC,
+  it only mounts one you point it at. Kept as a helper anyway so the deployment
+  cannot render an empty claimName, which is what it did before.
+*/ -}}
+{{- define "transmission.watchClaimName" -}}
+{{- $w := .Values.persistence.watch -}}
+{{- $w.existingClaim | default $w.claimName -}}
+{{- end }}
+
 {{/*
 Environment variables.
 */}}
 {{- define "transmission.env" -}}
-{{- range $name, $value := .Values.env }}
+{{- /*
+  A values file that clears env ("env:" with nothing under it) makes this nil.
+  range over nil is harmless, but hasKey on nil is a render-time panic.
+*/ -}}
+{{- $userEnv := .Values.env | default dict -}}
+{{- range $name, $value := $userEnv }}
 - name: {{ $name }}
   value: {{ $value | quote }}
 {{- end }}
-{{- if and .Values.peerPort.enabled (not (hasKey .Values.env "PEERPORT")) }}
+{{- if and .Values.peerPort.enabled (not (hasKey $userEnv "PEERPORT")) }}
 {{- /* Pins the listening port; without it Transmission may pick a random one
        and the port you forwarded would be the wrong one. */}}
 - name: PEERPORT
@@ -145,12 +166,52 @@ Validation.
 {{- end }}
 {{- end }}
 
-{{- if and .Values.persistence.watch.enabled (eq .Values.persistence.watch.type "hostPath") (not .Values.persistence.watch.hostPath) }}
+{{- $w := .Values.persistence.watch }}
+{{- if $w.enabled }}
+{{- if eq $w.type "hostPath" }}
+{{- if not $w.hostPath }}
 {{- fail "persistence.watch.hostPath must be set when type is hostPath" }}
+{{- end }}
+{{- else }}
+{{- /*
+  This chart never creates the watch PVC. Without one of these the rendered
+  claimName was empty, which the API server rejects with a message that says
+  nothing about /watch.
+*/}}
+{{- if not (or $w.existingClaim $w.claimName) }}
+{{- fail "persistence.watch.type is pvc, so set persistence.watch.existingClaim (or claimName) to the volume to mount at /watch — this chart does not create it" }}
+{{- end }}
+{{- end }}
 {{- end }}
 
 {{- if gt (int .Values.replicaCount) 1 }}
 {{- fail "replicaCount must be 1: Transmission keeps its state on a ReadWriteOnce volume and claims the peer hostPort, so a second pod cannot start" }}
+{{- end }}
+
+{{- /*
+  RollingUpdate deadlocks twice over here.
+
+  With one replica the default maxUnavailable rounds down to 0, so Kubernetes
+  starts the new pod before stopping the old one. It then waits for two things
+  the old pod still holds: the ReadWriteOnce /config volume, and — if hostPort
+  is on — peer port 51413 on the node. Neither is released until the old pod
+  goes away, which a rolling update will not do first.
+
+  Landing on the SAME node is the quiet case for the volume: ReadWriteOnce is
+  enforced per node, not per pod, so both pods mount /config and two Transmission
+  processes write the same settings.json and resume files.
+
+  The volume half is skipped with existingClaim, where the real access mode lives
+  outside these values. The hostPort half always applies.
+*/}}
+{{- if eq (.Values.updateStrategy.type | default "Recreate") "RollingUpdate" }}
+{{- $cfg := .Values.persistence.config }}
+{{- if and .Values.peerPort.enabled .Values.peerPort.hostPort }}
+{{- fail "updateStrategy.type must be Recreate while peerPort.hostPort is true: the new pod cannot bind the peer port until the old one releases it, so a rolling update never completes" }}
+{{- end }}
+{{- if and $cfg.enabled (not $cfg.existingClaim) (has "ReadWriteOnce" $cfg.accessModes) }}
+{{- fail "updateStrategy.type must be Recreate while persistence.config uses ReadWriteOnce: a rolling update would run two Transmission processes against the same /config. Use ReadWriteMany, or keep Recreate." }}
+{{- end }}
 {{- end }}
 
 {{- end }}

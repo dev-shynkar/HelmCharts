@@ -3,11 +3,17 @@ name: transmission
 description: Transmission torrent client - linuxserver.io image
 type: application
 
-# Bumped from 0.3.0: the BitTorrent peer port was never exposed, and hardcoded
-# name overrides made two releases collide.
-# See README.md ("Upgrading from 0.3.x") — resource names change.
+# 0.5.0 deletes a leftover template that rendered the config and downloads PVCs
+# a SECOND time, without the resource-policy annotation — on every upgrade it
+# overwrote the real claim and silently removed the protection `retain: true` is
+# supposed to give. Read README.md ("Upgrading from 0.4.x") before upgrading;
+# there is one command to run afterwards.
+#
+# 0.4.0 exposed the BitTorrent peer port and cleared the hardcoded name
+# overrides that made two releases collide.
+# See README.md ("Upgrading from 0.3.x") — resource names change there.
 version: 0.5.0
-appVersion: "4.1.3"
+appVersion: "4.0.6"
 
 kubeVersion: ">=1.21.0-0"
 
@@ -29,6 +35,20 @@ annotations:
   artifacthub.io/category: networking
   artifacthub.io/license: GPL-2.0-or-later
   artifacthub.io/changes: |
+    - kind: fixed
+      description: Delete templates/pvc.yaml, a leftover that rendered both PVCs a second time without helm.sh/resource-policy and overwrote the real claim on every upgrade
+    - kind: fixed
+      description: Guard .Values.env against nil; hasKey on an emptied env map was a render-time panic
+    - kind: fixed
+      description: persistence.watch with type pvc rendered an empty claimName instead of failing with a useful message
+    - kind: fixed
+      description: hostPath downloads default to type Directory, so a missing path stops the pod instead of making every torrent look lost
+    - kind: fixed
+      description: Reject updateStrategy RollingUpdate while the peer hostPort or a ReadWriteOnce /config would deadlock it
+    - kind: changed
+      description: Drop all container capabilities and add back only what s6-overlay needs, plus seccompProfile RuntimeDefault
+    - kind: added
+      description: NetworkPolicy, commonLabels, commonAnnotations, startupProbe, terminationGracePeriodSeconds, persistence.*.hostPathType and a configurable helm test pod
     - kind: added
       description: Expose the BitTorrent peer port 51413 TCP+UDP via hostPort, plus the PEERPORT variable
     - kind: added

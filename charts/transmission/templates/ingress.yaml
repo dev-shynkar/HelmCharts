@@ -5,7 +5,8 @@ metadata:
   name: {{ include "transmission.fullname" . }}
   labels:
     {{- include "transmission.labels" . | nindent 4 }}
-  {{- with .Values.ingress.annotations }}
+  {{- $ann := merge (dict) (.Values.ingress.annotations | default dict) (.Values.commonAnnotations | default dict) }}
+  {{- with $ann }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}

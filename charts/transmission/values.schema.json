@@ -24,10 +24,53 @@
     "imagePullSecrets": { "type": "array" },
     "nameOverride": { "type": "string" },
     "fullnameOverride": { "type": "string" },
+    "commonLabels": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Labels added to every rendered object. Never merged into the immutable selector labels."
+    },
+    "commonAnnotations": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Annotations added to every rendered object. On a PVC, persistence.*.retain still wins over helm.sh/resource-policy."
+    },
+    "terminationGracePeriodSeconds": { "type": "integer", "minimum": 0 },
     "updateStrategy": {
       "type": "object",
       "properties": {
-        "type": { "type": "string", "enum": ["Recreate", "RollingUpdate"] }
+        "type": {
+          "type": "string",
+          "enum": ["Recreate", "RollingUpdate"],
+          "description": "RollingUpdate is rejected at render time while peerPort.hostPort is on, or while persistence.config is a chart-managed ReadWriteOnce claim."
+        }
+      }
+    },
+    "startupProbe": { "$ref": "#/definitions/probe" },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "ingressFrom": {
+          "type": "array",
+          "description": "An empty list means every source in the cluster: a rule with ports and no `from` matches everything."
+        },
+        "egress": { "type": "array" },
+        "allowDNS": {
+          "type": "boolean",
+          "description": "Append a kube-system :53 UDP/TCP rule to egress. Ignored while egress is empty."
+        }
+      }
+    },
+    "tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "image": { "type": "string", "minLength": 1 },
+        "runAsUser": {
+          "type": ["string", "integer"],
+          "description": "Empty falls back to env.PUID, then to 1000."
+        }
       }
     },
     "revisionHistoryLimit": { "type": "integer", "minimum": 0 },
@@ -152,6 +195,11 @@
               "description": "hostPath additionally requires nodeSelector or affinity."
             },
             "hostPath": { "type": "string" },
+            "hostPathType": {
+              "type": "string",
+              "enum": ["Directory", "DirectoryOrCreate"],
+              "description": "Directory refuses to start the pod when the path is missing; DirectoryOrCreate silently creates an empty one. downloads defaults to Directory, watch to DirectoryOrCreate."
+            },
             "existingClaim": {
               "type": "string",
               "description": "A PVC this chart does not manage. Never point it at a PVC an earlier chart version created — Helm deletes it on upgrade. Use claimName instead."
@@ -175,7 +223,15 @@
             "enabled": { "type": "boolean" },
             "type": { "type": "string", "enum": ["hostPath", "pvc"] },
             "hostPath": { "type": "string" },
-            "existingClaim": { "type": "string" }
+            "hostPathType": { "type": "string", "enum": ["Directory", "DirectoryOrCreate"] },
+            "existingClaim": {
+              "type": "string",
+              "description": "With type: pvc one of existingClaim/claimName must be set — this chart never creates the watch volume."
+            },
+            "claimName": {
+              "type": "string",
+              "description": "Alias of existingClaim for /watch; the chart does not create this PVC either way."
+            }
           },
           "required": ["enabled"]
         }

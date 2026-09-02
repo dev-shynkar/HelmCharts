@@ -1,29 +1,35 @@
-{{- if and .Values.persistence.config.enabled (not .Values.persistence.config.existingClaim) }}
+{{- $p := .Values.persistence.config }}
+{{- if and $p.enabled (not $p.existingClaim) }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ include "transmission.configClaimName" . }}
   labels:
     {{- include "transmission.labels" . | nindent 4 }}
+  {{- /*
+    settings.json, resume files and statistics — losing this loses every torrent.
+    retain wins over anything commonAnnotations sets on the same key, so keeping
+    the volume can never be switched off by accident.
+  */}}
+  {{- $ann := merge (dict) ($p.annotations | default dict) (.Values.commonAnnotations | default dict) }}
+  {{- if $p.retain }}
+  {{- $_ := set $ann "helm.sh/resource-policy" "keep" }}
+  {{- end }}
+  {{- with $ann }}
   annotations:
-    {{- /* settings.json, resume files and statistics — losing this loses every torrent. */}}
-    {{- if .Values.persistence.config.retain }}
-    helm.sh/resource-policy: keep
-    {{- end }}
-    {{- with .Values.persistence.config.annotations }}
     {{- toYaml . | nindent 4 }}
-    {{- end }}
+  {{- end }}
 spec:
   accessModes:
-    {{- toYaml .Values.persistence.config.accessModes | nindent 4 }}
-  {{- if .Values.persistence.config.storageClassName }}
-  {{- if eq .Values.persistence.config.storageClassName "-" }}
+    {{- toYaml $p.accessModes | nindent 4 }}
+  {{- if $p.storageClassName }}
+  {{- if eq $p.storageClassName "-" }}
   storageClassName: ""
   {{- else }}
-  storageClassName: {{ .Values.persistence.config.storageClassName }}
+  storageClassName: {{ $p.storageClassName }}
   {{- end }}
   {{- end }}
   resources:
     requests:
-      storage: {{ .Values.persistence.config.size }}
+      storage: {{ $p.size }}
 {{- end }}

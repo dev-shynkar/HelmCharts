@@ -9,7 +9,8 @@ metadata:
   name: {{ include "transmission.fullname" . }}
   labels:
     {{- include "transmission.labels" . | nindent 4 }}
-  {{- with .Values.service.annotations }}
+  {{- $ann := merge (dict) (.Values.service.annotations | default dict) (.Values.commonAnnotations | default dict) }}
+  {{- with $ann }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}

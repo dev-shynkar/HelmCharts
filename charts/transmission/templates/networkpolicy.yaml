@@ -1,0 +1,62 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "transmission.fullname" . }}
+  labels:
+    {{- include "transmission.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "transmission.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    {{- /*
+      Only declare Egress when rules are given: an empty Egress policyType denies
+      all outbound traffic, and Transmission would lose DNS along with every
+      tracker and peer.
+    */}}
+    {{- if .Values.networkPolicy.egress }}
+    - Egress
+    {{- end }}
+  ingress:
+    {{- /*
+      An ingress rule with ports but no `from` matches every source in the
+      cluster. With ingressFrom empty this policy therefore restricts the port
+      number and nothing else — see the warning in values.yaml.
+
+      Only the web UI / RPC port is listed. The BitTorrent peer port arrives on
+      the node through the hostPort, not through the cluster network, so a
+      NetworkPolicy does not govern it either way.
+    */}}
+    - ports:
+        - port: {{ .Values.service.port }}
+          protocol: TCP
+      {{- with .Values.networkPolicy.ingressFrom }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- with .Values.networkPolicy.egress }}
+  egress:
+    {{- toYaml . | nindent 4 }}
+    {{- /*
+      Only appended alongside real egress rules. On its own it would be the
+      single rule under an Egress policyType, which denies everything else.
+    */}}
+    {{- if $.Values.networkPolicy.allowDNS }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    {{- end }}
+  {{- end }}
+{{- end }}

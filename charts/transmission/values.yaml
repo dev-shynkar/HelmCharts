@@ -31,12 +31,26 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+# Labels and annotations added to every object this chart renders.
+#
+# commonLabels deliberately does NOT reach the selector labels
+# (app.kubernetes.io/name + app.kubernetes.io/instance). A Deployment selector
+# is immutable, so folding arbitrary labels into it would break every upgrade
+# of an existing release.
+commonLabels: {}
+commonAnnotations: {}
+
 # RollingUpdate deadlocks on the ReadWriteOnce config volume and on the peer
 # hostPort — the new pod waits for resources the old pod still holds.
 updateStrategy:
   type: Recreate
 
 revisionHistoryLimit: 3
+
+# Transmission writes resume files and statistics on shutdown. The default 30s
+# can be short for a large torrent list, and a kill mid-write means re-verifying
+# on the next start.
+terminationGracePeriodSeconds: 90
 
 podAnnotations: {}
 podLabels: {}
@@ -97,20 +111,56 @@ resources:
     cpu: "1000m"
     memory: 2Gi
 
-podSecurityContext: {}
+# Applies to every container in the pod. RuntimeDefault does not conflict with
+# the s6-overlay entrypoint below.
+podSecurityContext:
+  seccompProfile:
+    type: RuntimeDefault
 
 # The linuxserver.io image starts as root under s6-overlay and drops to
 # PUID/PGID itself, so runAsNonRoot cannot be used as-is.
-#
-# Dropping capabilities should work but is untested here; if the container fails
-# to start, remove the `capabilities` block first. See README ("Hardening").
 securityContext:
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: false
-  # capabilities:
-  #   drop:
-  #     - ALL
-  #   add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID, KILL]
+
+  # Drop everything, then add back what s6-overlay needs:
+  #   CHOWN, FOWNER, FSETID, DAC_OVERRIDE  chown /config to PUID:PGID
+  #   SETUID, SETGID, SETFCAP, SETPCAP     s6-setuidgid dropping privileges
+  #   KILL                                 s6-svscan supervising its services
+  #   AUDIT_WRITE                          PAM writes an audit record
+  #
+  # What this actually buys you is the capabilities NOT in the list — above all
+  # NET_RAW (raw sockets), plus MKNOD, SYS_CHROOT and NET_BIND_SERVICE. Both
+  # ports this chart uses are above 1024, so nothing here needs to bind low.
+  #
+  # This set is wider than the one the duplicati chart uses because s6-overlay
+  # does more at startup than a single chown + su. THIS IS THE ONE CHANGE IN
+  # 0.5.0 THAT CAN STOP AN OTHERWISE-WORKING POD: if it crashloops at start,
+  # comment out `capabilities` and nothing else. Do not switch back to root.
+  capabilities:
+    drop:
+      - ALL
+    add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - FSETID
+      - KILL
+      - SETGID
+      - SETUID
+      - SETFCAP
+      - SETPCAP
+      - AUDIT_WRITE
+
+# A large torrent list takes a while to load on start. The startup probe gives
+# it up to 5 minutes before liveness is allowed to fire at all.
+startupProbe:
+  enabled: true
+  tcpSocket:
+    port: http
+  periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 60
 
 # tcpSocket rather than httpGet on purpose: Transmission checks authorization
 # *before* it redirects "/" to the web UI (libtransmission/rpc-server.cc), so
@@ -214,6 +264,16 @@ persistence:
     type: "hostPath"
     hostPath: "/media/k3s-data"
 
+    # Directory: the pod refuses to start if hostPath does not exist.
+    # DirectoryOrCreate: the kubelet creates an empty directory instead.
+    #
+    # Default Directory, because the empty-directory case is exactly the failure
+    # described above. It catches a wrong path or a missing directory, but NOT a
+    # disk that failed to mount after a reboot — the mount point is then a real
+    # (empty) directory. For that, add an initContainer that checks for a marker
+    # file.
+    hostPathType: Directory
+
     # See the notes on existingClaim vs claimName under config above.
     existingClaim: ""
     claimName: ""
@@ -229,7 +289,15 @@ persistence:
     enabled: false
     type: "hostPath"
     hostPath: ""
+
+    # DirectoryOrCreate here, unlike downloads: a watch folder holds no data of
+    # its own and an empty one is the normal state.
+    hostPathType: DirectoryOrCreate
+
+    # With type: pvc one of these must be set, or the rendered claimName would
+    # be empty. See the notes under config for which to use.
     existingClaim: ""
+    claimName: ""
 
 # Required when persistence.downloads.type is hostPath (see above).
 nodeSelector: {}
@@ -245,8 +313,44 @@ podDisruptionBudget:
   minAvailable: ""
   maxUnavailable: 1
 
+networkPolicy:
+  enabled: false
+
+  # WARNING: an empty list means "from anywhere". A NetworkPolicy ingress rule
+  # with ports but no `from` matches every source in the cluster, so enabling
+  # the policy with ingressFrom: [] restricts the port number and nothing else.
+  #
+  #   ingressFrom:
+  #     - namespaceSelector:
+  #         matchLabels:
+  #           kubernetes.io/metadata.name: ingress-nginx
+  ingressFrom: []
+
+  # Egress stays completely unrestricted while this list is empty — the chart
+  # does not even declare the Egress policyType, because declaring it with no
+  # rules would deny all outbound traffic.
+  #
+  # Restricting egress on a torrent client is mostly pointless: it has to reach
+  # arbitrary peers on arbitrary ports, so any workable rule ends up allowing
+  # 0.0.0.0/0. The exception is a VPN sidecar, where you genuinely want to allow
+  # only the tunnel. That is the case this is here for.
+  egress: []
+
+  # Appends a DNS rule (kube-system :53 UDP+TCP) to the egress list above.
+  # Ignored while egress is empty, since egress is unrestricted anyway.
+  allowDNS: true
+
+  # The peer port arrives on the node, not through the cluster network, so it is
+  # covered by the hostPort and your router — not by this policy.
+
 extraVolumes: []
 extraVolumeMounts: []
 initContainers: []
 # Somewhere to put a VPN sidecar (gluetun and friends).
 sidecars: []
+
+# The `helm test` pod.
+tests:
+  image: busybox:1.36
+  # Empty means env.PUID, falling back to 1000.
+  runAsUser: ""

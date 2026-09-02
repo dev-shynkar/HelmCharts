@@ -5,6 +5,10 @@ metadata:
   name: {{ include "transmission.fullname" . }}
   labels:
     {{- include "transmission.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   replicas: {{ .Values.replicaCount }}
   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
@@ -21,16 +25,23 @@ spec:
         {{- include "transmission.selectorLabels" . | nindent 8 }}
         {{- /* Retained from 0.3.x so existing dashboards keep matching. */}}
         app: {{ include "transmission.name" . }}
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.podAnnotations }}
+      {{- /* podAnnotations wins over commonAnnotations on a shared key. */}}
+      {{- $ann := merge (dict) (.Values.podAnnotations | default dict) (.Values.commonAnnotations | default dict) }}
+      {{- with $ann }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
       serviceAccountName: {{ include "transmission.serviceAccountName" . }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
 
       {{- with .Values.priorityClassName }}
       priorityClassName: {{ . }}
@@ -116,6 +127,11 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
 
+          {{- if .Values.startupProbe.enabled }}
+          startupProbe:
+            {{- omit .Values.startupProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+
           {{- if .Values.readinessProbe.enabled }}
           readinessProbe:
             {{- omit .Values.readinessProbe "enabled" | toYaml | nindent 12 }}
@@ -142,7 +158,11 @@ spec:
           {{- if eq .Values.persistence.downloads.type "hostPath" }}
           hostPath:
             path: {{ .Values.persistence.downloads.hostPath }}
-            type: DirectoryOrCreate
+            {{- /*
+              Directory by default: an auto-created empty directory here makes
+              every torrent look lost.
+            */}}
+            type: {{ .Values.persistence.downloads.hostPathType | default "Directory" }}
           {{- else }}
           persistentVolumeClaim:
             claimName: {{ include "transmission.downloadsClaimName" . }}
@@ -154,10 +174,10 @@ spec:
           {{- if eq .Values.persistence.watch.type "hostPath" }}
           hostPath:
             path: {{ .Values.persistence.watch.hostPath }}
-            type: DirectoryOrCreate
+            type: {{ .Values.persistence.watch.hostPathType | default "DirectoryOrCreate" }}
           {{- else }}
           persistentVolumeClaim:
-            claimName: {{ .Values.persistence.watch.existingClaim }}
+            claimName: {{ include "transmission.watchClaimName" . }}
           {{- end }}
         {{- end }}
 

@@ -1,6 +1,14 @@
+{{- /*
+  .Values.env is read in several places below. A values file that clears it
+  ("env:" with nothing under it) makes it nil, and nil.PUID is a render-time
+  panic, so bind a guarded copy once — same as the transmission.env helper.
+*/ -}}
+{{- $env := .Values.env | default dict -}}
+{{- /* Most sections below are conditional, so number them at render time. */ -}}
+{{- $n := 0 -}}
 Transmission {{ .Chart.AppVersion }} deployed as "{{ .Release.Name }}".
 
-1. Open the web UI:
+{{ $n = add1 $n }}{{ $n }}. Open the web UI:
 {{- if .Values.ingress.enabled }}
 {{- range $host := .Values.ingress.hosts }}
 
@@ -25,11 +33,21 @@ The Ingress is ENABLED, so this is very likely exposed beyond your cluster.
     --from-literal=USER=admin --from-literal=PASS='<pick one>'
 
   # then: auth.existingSecret=transmission-auth
+{{- else }}
+
+   Credentials come from the Secret "{{ .Values.auth.existingSecret }}" (keys
+   {{ .Values.auth.keys.username }} / {{ .Values.auth.keys.password }}).
+
+   Changing a value there does NOT restart the pod: USER and PASS are read once
+   at startup. The chart cannot checksum a Secret it does not own without
+   `lookup`, which breaks `helm template`, so after rotating either key:
+
+     kubectl --namespace {{ .Release.Namespace }} rollout restart deploy/{{ include "transmission.fullname" . }}
 {{- end }}
 
 {{- if .Values.peerPort.enabled }}
 
-2. BitTorrent peer port: {{ .Values.peerPort.port }} (TCP and UDP).
+{{ $n = add1 $n }}{{ $n }}. BitTorrent peer port: {{ .Values.peerPort.port }} (TCP and UDP).
 {{- if .Values.peerPort.hostPort }}
 
    It is bound directly on the node (hostPort). Two things are still on you:
@@ -49,23 +67,44 @@ The Ingress is ENABLED, so this is very likely exposed beyond your cluster.
 {{- end }}
 {{- else }}
 
-2. WARNING: peerPort.enabled is false. Transmission can only make outgoing
+{{ $n = add1 $n }}{{ $n }}. WARNING: peerPort.enabled is false. Transmission can only make outgoing
    connections — seeding will not work and downloads will be slow.
 {{- end }}
 
 {{- if and .Values.persistence.downloads.enabled (eq .Values.persistence.downloads.type "hostPath") }}
 
-3. Downloads use hostPath {{ .Values.persistence.downloads.hostPath }} on the node selected by your
-   nodeSelector/affinity. Kubernetes creates it as root:root 0755 if missing,
-   which UID {{ .Values.env.PUID | default "1000" }} cannot write to. Check once after the first start:
+{{ $n = add1 $n }}{{ $n }}. Downloads use hostPath {{ .Values.persistence.downloads.hostPath }} of type {{ .Values.persistence.downloads.hostPathType | default "Directory" }}
+   on the node selected by your nodeSelector/affinity.
+{{- if eq (.Values.persistence.downloads.hostPathType | default "Directory") "Directory" }}
 
-     sudo chown -R {{ .Values.env.PUID | default "1000" }}:{{ .Values.env.PGID | default "1000" }} {{ .Values.persistence.downloads.hostPath }}
+   The pod will not start at all if that path is missing, which is deliberate:
+   an empty /downloads makes every torrent look lost.
+{{- else }}
+
+   hostPathType is not Directory, so Kubernetes creates the path as root:root
+   0755 when missing — and UID {{ $env.PUID | default "1000" }} cannot write to it. Worse, an empty
+   /downloads makes every torrent look lost. Consider hostPathType: Directory.
+{{- end }}
+
+   Either way, confirm ownership once after the first start:
+
+     sudo chown -R {{ $env.PUID | default "1000" }}:{{ $env.PGID | default "1000" }} {{ .Values.persistence.downloads.hostPath }}
 {{- end }}
 
 {{- if not .Values.persistence.config.enabled }}
 
-WARNING: persistence.config is disabled. settings.json, the torrent list and all
-resume data live in the container filesystem and are lost on every restart.
+{{ $n = add1 $n }}{{ $n }}. WARNING: persistence.config is disabled. settings.json, the torrent list
+   and all resume data live in the container filesystem and are lost on every
+   restart.
+{{- end }}
+
+{{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.ingressFrom) }}
+
+{{ $n = add1 $n }}{{ $n }}. NOTE: networkPolicy is enabled but networkPolicy.ingressFrom is empty.
+
+   A rule with ports and no `from` matches every source in the cluster, so port
+   {{ .Values.service.port }} is still reachable from any pod in any namespace. List the callers
+   that are actually allowed if you meant to restrict it.
 {{- end }}
 
 {{- if not .Values.image.tag }}

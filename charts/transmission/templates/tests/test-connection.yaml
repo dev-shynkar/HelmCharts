@@ -1,3 +1,11 @@
+{{- /*
+  Run the probe as the same user the app runs as, so the test does not quietly
+  pass under a UID the real workload never uses. env may be nil if a values file
+  clears it, hence the guarded copy.
+*/}}
+{{- $env := .Values.env | default dict }}
+{{- $tests := .Values.tests | default dict }}
+{{- $uid := $tests.runAsUser | default ($env.PUID | default "1000") | int }}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -10,11 +18,15 @@ metadata:
 spec:
   restartPolicy: Never
   securityContext:
+    {{- if ne $uid 0 }}
     runAsNonRoot: true
-    runAsUser: 1000
+    {{- end }}
+    runAsUser: {{ $uid }}
+    seccompProfile:
+      type: RuntimeDefault
   containers:
     - name: check-rpc
-      image: busybox:1.36
+      image: {{ $tests.image | default "busybox:1.36" | quote }}
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:

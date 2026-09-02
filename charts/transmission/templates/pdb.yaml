@@ -5,6 +5,10 @@ metadata:
   name: {{ include "transmission.fullname" . }}
   labels:
     {{- include "transmission.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   {{- /*
     With replicaCount: 1, minAvailable: 1 makes the pod undrainable and blocks

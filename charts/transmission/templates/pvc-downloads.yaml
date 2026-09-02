@@ -6,13 +6,15 @@ metadata:
   name: {{ include "transmission.downloadsClaimName" . }}
   labels:
     {{- include "transmission.labels" . | nindent 4 }}
+  {{- /* retain wins over commonAnnotations on the same key. */}}
+  {{- $ann := merge (dict) ($dl.annotations | default dict) (.Values.commonAnnotations | default dict) }}
+  {{- if $dl.retain }}
+  {{- $_ := set $ann "helm.sh/resource-policy" "keep" }}
+  {{- end }}
+  {{- with $ann }}
   annotations:
-    {{- if $dl.retain }}
-    helm.sh/resource-policy: keep
-    {{- end }}
-    {{- with $dl.annotations }}
     {{- toYaml . | nindent 4 }}
-    {{- end }}
+  {{- end }}
 spec:
   accessModes:
     {{- toYaml $dl.accessModes | nindent 4 }}
