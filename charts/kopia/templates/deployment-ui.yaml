@@ -1,0 +1,315 @@
+{{- if include "kopia.serverEnabled" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kopia.uiFullname" . }}
+  labels:
+    {{- include "kopia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- /* Fixed at 1: a second replica would fight over the ReadWriteOnce cache. */}}
+  replicas: 1
+  revisionHistoryLimit: {{ .Values.ui.revisionHistoryLimit }}
+  {{- /* The new pod cannot attach the cache volume while the old one holds it. */}}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "kopia.componentLabels" (dict "ctx" . "component" "ui") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kopia.componentLabels" (dict "ctx" . "component" "ui") | nindent 8 }}
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- $ann := merge (dict) (.Values.podAnnotations | default dict) (.Values.commonAnnotations | default dict) }}
+      {{- with $ann }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "kopia.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+
+      {{- /*
+        In server mode this pod is the thing taking snapshots, and the default
+        30 seconds is not enough for kopia to flush a checkpoint of an upload
+        that may have been running for hours. A node drain or `helm upgrade`
+        would otherwise throw that progress away.
+      */}}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
+
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- if eq .Values.mode "server" }}
+      {{- /*
+        Only in server mode, because that is where the sources are mounted —
+        an initContainer that checks a marker file under /sources needs the
+        volume to exist, and in cronjob mode it lives on the CronJob pod
+        instead. Same value, applied to whichever workload holds the data.
+      */}}
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
+
+      containers:
+        - name: ui
+          image: {{ include "kopia.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          command:
+            - /bin/sh
+            - /scripts/ui.sh
+          args: []
+
+          ports:
+            - name: http
+              containerPort: 51515
+              protocol: TCP
+
+          env:
+            - name: KOPIA_CONFIG_PATH
+              value: {{ printf "%s/config/repository.config" .Values.stateDir | quote }}
+            - name: KOPIA_CACHE_DIRECTORY
+              value: {{ printf "%s/cache" .Values.stateDir | quote }}
+            - name: KOPIA_LOG_DIR
+              value: "/tmp/kopia-logs"
+            - name: KOPIA_CHECK_FOR_UPDATES
+              value: "false"
+            - name: HOME
+              value: "/tmp"
+            - name: KOPIA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.existingSecret }}
+                  key: {{ .Values.auth.keys.password }}
+            {{- if .Values.ui.auth.passwordKey }}
+            - name: KOPIA_UI_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.existingSecret }}
+                  key: {{ .Values.ui.auth.passwordKey }}
+            {{- end }}
+            {{- if .Values.auth.keys.sftpPassword }}
+            - name: CHART_SFTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.existingSecret }}
+                  key: {{ .Values.auth.keys.sftpPassword }}
+            {{- end }}
+            {{- range $name, $value := (.Values.env | default dict) }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+          {{- with .Values.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: state
+              mountPath: {{ .Values.stateDir | quote }}
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.auth.keys.sshPrivateKey }}
+            - name: ssh
+              mountPath: /kopia-ssh
+              readOnly: true
+            {{- end }}
+            {{- if eq .Values.ui.tls.mode "existing" }}
+            - name: tls
+              mountPath: /kopia-tls
+              readOnly: true
+            {{- end }}
+            {{- if eq .Values.mode "server" }}
+            {{- range $src := .Values.sources }}
+            - name: src-{{ $src.name }}
+              mountPath: {{ include "kopia.sourceMountPath" (dict "src" $src) | quote }}
+              {{- with $src.subPath }}
+              subPath: {{ . }}
+              {{- end }}
+              {{- /* Read-only even though the server is writable: kopia only
+                     ever reads a source, and this keeps a UI mistake from
+                     reaching the originals. */}}
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- if .Values.restore.enabled }}
+            {{- /*
+              The only writable mount in this pod. Sources stay read-only, so a
+              restore can never land on top of the originals.
+            */}}
+            - name: restore
+              mountPath: {{ .Values.restore.mountPath | quote }}
+            {{- end }}
+            {{- with .Values.ui.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+          {{- with .Values.ui.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- /*
+            Deliberately TCP, not HTTP. The server answers 401 to an
+            unauthenticated GET, which is proof it is alive but would fail an
+            httpGet probe - and with tls.mode "existing" the probe would also
+            have to know the scheme.
+          */}}
+          {{- if .Values.ui.startupProbe.enabled }}
+          startupProbe:
+            tcpSocket:
+              port: http
+            {{- omit .Values.ui.startupProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- if .Values.ui.readinessProbe.enabled }}
+          readinessProbe:
+            tcpSocket:
+              port: http
+            {{- omit .Values.ui.readinessProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- if .Values.ui.livenessProbe.enabled }}
+          livenessProbe:
+            tcpSocket:
+              port: http
+            {{- omit .Values.ui.livenessProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ include "kopia.fullname" . }}-scripts
+            defaultMode: 0555
+        - name: state
+          {{- if include "kopia.serverStateEnabled" . }}
+          persistentVolumeClaim:
+            {{- /* persistence.state in server mode, ui.persistence.cache in
+                   cronjob mode - see kopia.serverStateClaimName. */}}
+            claimName: {{ include "kopia.serverStateClaimName" . | quote }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.auth.keys.sshPrivateKey }}
+        - name: ssh
+          secret:
+            secretName: {{ .Values.auth.existingSecret | quote }}
+            {{- /* See _helpers.tpl: 0400 would be root-only. */}}
+            defaultMode: 0444
+            items:
+              - key: {{ .Values.auth.keys.sshPrivateKey }}
+                path: id_key
+              {{- if .Values.auth.keys.knownHosts }}
+              - key: {{ .Values.auth.keys.knownHosts }}
+                path: known_hosts
+              {{- end }}
+        {{- end }}
+        {{- if eq .Values.ui.tls.mode "existing" }}
+        - name: tls
+          secret:
+            secretName: {{ .Values.ui.tls.existingSecret | quote }}
+            defaultMode: 0444
+        {{- end }}
+        {{- if eq .Values.mode "server" }}
+        {{- /*
+          Server mode mounts the sources into this pod: kopia's directory
+          browser can only offer what the container can see, so whatever you
+          want to pick in the UI has to be mounted here first.
+        */}}
+        {{- range $src := .Values.sources }}
+        - name: src-{{ $src.name }}
+          {{- if eq ($src.type | default "hostPath") "hostPath" }}
+          hostPath:
+            path: {{ $src.hostPath | quote }}
+            type: {{ $src.hostPathType | default "Directory" }}
+          {{- else }}
+          persistentVolumeClaim:
+            claimName: {{ $src.existingClaim | quote }}
+            readOnly: true
+          {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.restore.enabled }}
+        - name: restore
+          {{- if eq .Values.restore.type "hostPath" }}
+          hostPath:
+            path: {{ .Values.restore.hostPath | quote }}
+            {{- /*
+              Directory, not DirectoryOrCreate: an auto-created directory is
+              owned by root and the pod runs as a normal user, so restores
+              would fail with "permission denied" from inside the UI. Prepare
+              it on the node instead - see values.yaml.
+            */}}
+            type: {{ .Values.restore.hostPathType | default "Directory" }}
+          {{- else }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.restore.existingClaim | quote }}
+          {{- end }}
+        {{- end }}
+        {{- with .Values.ui.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+
+      {{- /*
+        In cronjob mode this pod touches no hostPath, so it does not inherit
+        the top-level nodeSelector - that one exists to pin the backup pod to
+        the node holding the data, and the UI has no reason to sit there.
+
+        In server mode it mounts the sources itself, so it does inherit unless
+        ui.nodeSelector overrides.
+      */}}
+      {{- $ns := .Values.ui.nodeSelector }}
+      {{- if and (not $ns) (eq .Values.mode "server") }}{{ $ns = .Values.nodeSelector }}{{ end }}
+      {{- with $ns }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- $aff := .Values.ui.affinity }}
+      {{- if and (not $aff) (eq .Values.mode "server") }}{{ $aff = .Values.affinity }}{{ end }}
+      {{- with $aff }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

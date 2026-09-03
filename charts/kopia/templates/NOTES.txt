@@ -1,0 +1,293 @@
+{{- $paths := include "kopia.snapshotPaths" . | fromJsonArray -}}
+{{- $server := include "kopia.serverEnabled" . -}}
+{{- $srvMode := eq .Values.mode "server" -}}
+{{- $n := 0 -}}
+Kopia {{ .Chart.AppVersion }} deployed as "{{ .Release.Name }}" in {{ .Values.mode }} mode.
+
+  schedule    {{ if $srvMode }}per source, in the UI (Snapshot Frequency){{ else }}{{ .Values.schedule }}{{ with .Values.timeZone }} ({{ . }}){{ end }}{{ if .Values.suspend }}  [SUSPENDED]{{ end }}{{ end }}
+  repository  sftp://{{ .Values.sftp.username }}@{{ .Values.sftp.host }}:{{ .Values.sftp.port }}{{ .Values.sftp.path }}
+  identity    {{ include "kopia.serverIdentityUsername" . }}@{{ include "kopia.serverIdentityHostname" . }}
+  {{ if $srvMode }}mounted     {{ range $i, $src := .Values.sources }}{{ if $i }}, {{ end }}{{ include "kopia.sourceMountPath" (dict "src" $src) }}{{ end }}{{ else }}paths       {{ join ", " $paths }}{{ end }}
+
+{{- if $srvMode }}
+
+{{ $n = add1 $n }}{{ $n }}. Nothing is scheduled yet. Open the UI and add your first source:
+{{- if .Values.ui.ingress.enabled }}
+{{- range $host := .Values.ui.ingress.hosts }}
+
+     http{{ if $.Values.ui.ingress.tls }}s{{ end }}://{{ $host.host }}
+{{- end }}
+{{- else }}
+
+     kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "kopia.uiFullname" . }} 51515:{{ .Values.ui.service.port }}
+     # then http{{ if eq .Values.ui.tls.mode "existing" }}s{{ end }}://localhost:51515
+{{- end }}
+
+   Snapshots tab -> New Snapshot -> browse to a directory under:
+{{- range $src := .Values.sources }}
+
+     {{ include "kopia.sourceMountPath" (dict "src" $src) }}
+{{- end }}
+
+   Pick a Snapshot Frequency in the policy and kopia's own scheduler takes it
+   from there. Only paths under the mounts above exist inside this pod; adding
+   anything else means editing `sources` in values.yaml and restarting.
+{{- else }}
+
+{{ $n = add1 $n }}{{ $n }}. Run it now instead of waiting for the schedule:
+
+     kubectl create job --from=cronjob/{{ include "kopia.fullname" . }} {{ include "kopia.fullname" . }}-manual-1 -n {{ .Release.Namespace }}
+     kubectl logs -f job/{{ include "kopia.fullname" . }}-manual-1 -n {{ .Release.Namespace }}
+{{- end }}
+
+   And check the credentials without touching the repository:
+
+     helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+{{- if .Values.repository.createIfMissing }}
+
+{{ $n = add1 $n }}{{ $n }}. WARNING: repository.createIfMissing is on.
+
+   If the first connect fails for any reason other than "no repository here" —
+   a typo in sftp.path is the usual one — kopia will create a brand new empty
+   repository at that path and upload everything into it. Turn it back off once
+   the first run has succeeded.
+{{- else }}
+
+{{ $n = add1 $n }}{{ $n }}. The repository must already exist. If it does not, the {{ if $srvMode }}pod crashloops{{ else }}first run fails{{ end }}
+   with a connect error. Create it in one of two ways:
+
+   * set repository.createIfMissing=true{{ if not $srvMode }}, run the job once{{ end }}, then set it back; or
+   * create it from a machine with the SSH key:
+
+       kopia repository create sftp \
+         --path={{ .Values.sftp.path }} --host={{ .Values.sftp.host }} \
+         --port={{ .Values.sftp.port }} --username={{ .Values.sftp.username }} \
+         --keyfile=./kopia_key --known-hosts=./known_hosts
+{{- end }}
+
+{{ $n = add1 $n }}{{ $n }}. Snapshots are filed under {{ include "kopia.serverIdentityUsername" . }}@{{ include "kopia.serverIdentityHostname" . }}.
+
+   That identity is pinned by the chart on purpose. Every pod gets a random
+   name, and without the override each snapshot would belong to a different
+   source — retention is per source, so nothing would ever be pruned. Changing
+   identity.hostname or identity.username later makes kopia see a new source
+   and start the history over.
+
+{{- if and $server (not $srvMode) }}
+
+{{ $n = add1 $n }}{{ $n }}. Web UI ({{ if include "kopia.serverReadOnly" . }}read-only{{ else }}WRITABLE{{ end }}):
+{{- if .Values.ui.ingress.enabled }}
+{{- range $host := .Values.ui.ingress.hosts }}
+
+     http{{ if $.Values.ui.ingress.tls }}s{{ end }}://{{ $host.host }}
+{{- end }}
+{{- else }}
+
+     kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "kopia.uiFullname" . }} 51515:{{ .Values.ui.service.port }}
+{{- end }}
+{{- if include "kopia.serverReadOnly" . }}
+
+   Read-only: it cannot add a source, edit a policy or change a schedule. Those
+   live in values.yaml. For UI-driven configuration, set mode: server.
+{{- end }}
+{{- end }}
+
+{{- if $server }}
+{{- if .Values.ui.auth.passwordKey }}
+
+{{ $n = add1 $n }}{{ $n }}. Sign in as "{{ .Values.ui.auth.username }}" with {{ .Values.ui.auth.passwordKey }} from Secret "{{ .Values.auth.existingSecret }}".
+   The pod will not start until that key exists:
+
+     kubectl create secret generic {{ .Values.auth.existingSecret }} -n {{ .Release.Namespace }} \
+       --from-literal={{ .Values.ui.auth.passwordKey }}="$(openssl rand -base64 24)" \
+       --dry-run=client -o yaml | kubectl apply -f -
+
+   Rotating it needs a restart, since the flag is read once at startup:
+
+     kubectl --namespace {{ .Release.Namespace }} rollout restart deploy/{{ include "kopia.uiFullname" . }}
+{{- else }}
+
+{{ $n = add1 $n }}{{ $n }}. The UI has NO PASSWORD.
+
+   Anyone who can reach {{ if .Values.ui.ingress.enabled }}{{ range $i, $h := .Values.ui.ingress.hosts }}{{ if $i }}, {{ end }}{{ $h.host }}{{ end }}{{ else }}port {{ .Values.ui.service.port }}{{ end }} can read every file in every
+   snapshot{{ if not (include "kopia.serverReadOnly" .) }}, and can delete snapshots and change what gets backed up{{ end }}.
+{{- if .Values.ui.ingress.enabled }}
+
+   You have an Ingress, so this is reachable from wherever that Ingress is.
+   Give it a password:
+
+     kubectl create secret generic {{ .Values.auth.existingSecret }} -n {{ .Release.Namespace }} \
+       --from-literal=KOPIA_UI_PASSWORD="$(openssl rand -base64 24)" \
+       --dry-run=client -o yaml | kubectl apply -f -
+
+     # then: ui.auth.passwordKey=KOPIA_UI_PASSWORD
+{{- else }}
+
+   No Ingress is configured, so it is reachable only from inside the cluster
+   or through `kubectl port-forward`. Set ui.auth.passwordKey before exposing
+   it.
+{{- end }}
+{{- end }}
+
+{{- if .Values.restore.enabled }}
+
+   Restore target: {{ .Values.restore.mountPath }} in the UI{{ if eq .Values.restore.type "hostPath" }}, which is {{ .Values.restore.hostPath }} on the node{{ end }}.
+   Type that path into the restore dialog and the files appear there.
+{{- if eq .Values.restore.type "hostPath" }}
+
+   It must already exist and be writable by UID {{ .Values.podSecurityContext.runAsUser | default 0 }} — fsGroup does not apply
+   to hostPath, so prepare it on the node once:
+
+     mkdir -p {{ .Values.restore.hostPath }} && chown {{ .Values.podSecurityContext.runAsUser | default 0 }}:{{ .Values.podSecurityContext.runAsGroup | default 0 }} {{ .Values.restore.hostPath }}
+{{- end }}
+
+   Everything else in this pod is read-only, including your sources, so a
+   restore cannot land on top of the originals.
+{{- else }}
+
+   Restores land in the pod's OWN filesystem and are lost when it restarts.
+   Give it somewhere real to write:
+
+     restore:
+       enabled: true
+       hostPath: /mnt/data/restore
+
+   Or use KopiaUI on your desktop against the same repository.
+{{- end }}
+{{- end }}
+
+{{- if $srvMode }}
+
+{{ $n = add1 $n }}{{ $n }}. NOTE: this mode has no red Job to alert on.
+
+   A failed snapshot is a line in this pod's log while the pod keeps reporting
+   Ready. Watch it:
+
+     kubectl --namespace {{ .Release.Namespace }} logs -f deploy/{{ include "kopia.uiFullname" . }}
+
+   Two things fix that, and you want both:
+
+   * verify.enabled — a Job that goes red when the repository is bad;
+   * kopia's own notifications, which cover a failed snapshot:
+
+       kopia notification profile configure webhook \
+         --profile-name=homelab --endpoint=<url> --min-severity=warning
+
+     Configure it once from the UI or a one-off pod; it lives in the
+     repository, not in this chart. Test it with --send-test-notification.
+{{- end }}
+
+{{- if $srvMode }}
+
+{{ $n = add1 $n }}{{ $n }}. These settings do nothing in server mode — kopia owns them now, and you
+   change them in the UI, not here:
+
+     schedule, suspend, concurrencyPolicy, backoffLimit, activeDeadlineSeconds,
+     startingDeadlineSeconds, ttlSecondsAfterFinished,
+     successfulJobsHistoryLimit, failedJobsHistoryLimit   (no backup CronJob)
+     snapshot.*, policy.*                                 (set per source in the UI)
+     ui.readOnly, ui.identity, ui.persistence.cache       (see values.yaml)
+
+   Still live: terminationGracePeriodSeconds (how long kopia gets to flush a
+   checkpoint when the pod stops), verify.* (its own CronJob), and timeZone,
+   which that CronJob falls back to.
+
+   `snapshotPaths` is rejected outright rather than ignored — silently dropping
+   it would leave you believing a path is backed up when nothing looks at it.
+{{- end }}
+
+{{- if and $server .Values.networkPolicy.enabled (not .Values.networkPolicy.uiIngressFrom) }}
+
+{{ $n = add1 $n }}{{ $n }}. NOTE: networkPolicy is on but networkPolicy.uiIngressFrom is empty.
+
+   A rule with ports and no `from` matches every source in the cluster, so port
+   51515 stays reachable from any pod in any namespace. List the ingress
+   controller's namespace if you meant to restrict it.
+{{- end }}
+
+{{- if not .Values.persistence.state.enabled }}
+
+{{ $n = add1 $n }}{{ $n }}. NOTE: persistence.state is disabled.
+
+   The config file and both caches are in an emptyDir, so every {{ if $srvMode }}restart{{ else }}run{{ end }} starts with
+   a cold cache and reconnects from scratch. Nothing is lost, but over SFTP it
+   will take far longer than it needs to.
+{{- end }}
+
+{{- range $src := .Values.sources }}
+{{- if and (eq ($src.type | default "hostPath") "hostPath") (ne ($src.hostPathType | default "Directory") "Directory") }}
+
+{{ $n = add1 $n }}{{ $n }}. WARNING: source "{{ $src.name }}" uses hostPathType {{ $src.hostPathType }}.
+
+   The kubelet will create {{ $src.hostPath }} when it is missing instead of
+   refusing to start the pod. Kopia would then snapshot an empty directory,
+   record it as a success, and retention would begin pruning the snapshots that
+   held the real data. Use hostPathType: Directory.
+{{- end }}
+{{- end }}
+
+{{- if not $srvMode }}
+
+{{ $n = add1 $n }}{{ $n }}. Confirm the source paths hold what you think they do before trusting the
+   first run. The pod runs as UID {{ .Values.podSecurityContext.runAsUser | default 0 }}, which must be able to read them:
+
+     kubectl logs -n {{ .Release.Namespace }} job/{{ include "kopia.fullname" . }}-manual-1 | head -40
+
+   A snapshot of an empty directory is recorded as a success, and retention
+   then starts pruning the snapshots that held the real data. Kopia fails the
+   run on an unreadable file rather than skipping it, so a permission problem
+   shows up as a failed Job — unless you set policy.ignoreFileErrors.
+
+{{- end }}
+
+{{- if .Values.verify.enabled }}
+
+{{ $n = add1 $n }}{{ $n }}. Verification runs on "{{ .Values.verify.schedule }}"{{ with (.Values.verify.timeZone | default .Values.timeZone) }} ({{ . }}){{ end }}, reading {{ .Values.verify.percent }}% of
+   files back out of the repository. It connects read-only, so it can neither
+   delete a snapshot nor touch maintenance ownership.
+
+   This is the Job to point an alert at — it is the one that goes red when the
+   repository is not what it should be:
+
+     kubectl get jobs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=verify
+{{- if .Values.verify.exportPolicies }}
+
+   It also dumps the repository-side policy configuration to its log. In server
+   mode that dump is the only copy of your sources, schedules and retention
+   outside the NAS — keep one in version control:
+
+     kubectl logs -n {{ .Release.Namespace }} job/<name> \
+       | sed -n '/BEGIN POLICY EXPORT/,/END POLICY EXPORT/p'
+     # restore with: kopia policy import
+{{- end }}
+
+   Run it now rather than waiting for Sunday:
+
+     kubectl create job --from=cronjob/{{ include "kopia.fullname" . }}-verify {{ include "kopia.fullname" . }}-verify-1 -n {{ .Release.Namespace }}
+{{- else }}
+
+{{ $n = add1 $n }}{{ $n }}. WARNING: nothing verifies these backups.
+
+   No step ever reads the data back out, so a repository that has silently
+   rotted looks exactly like a healthy one{{ if $srvMode }}, and in this mode nothing goes red
+   either{{ end }}. Add the verification CronJob:
+
+     verify:
+       enabled: true
+       schedule: "23 5 * * 0"
+{{- end }}
+
+{{- if not .Values.maintenance.full }}
+
+{{ $n = add1 $n }}{{ $n }}. NOTE: maintenance.full is off.
+
+   Retention will keep marking snapshots for deletion, but nothing will ever
+   delete the underlying blobs — the repository grows forever.
+{{- end }}
+
+{{ $n = add1 $n }}{{ $n }}. Rotating KOPIA_PASSWORD in the Secret does NOT change the repository
+   password — it just stops the pod from opening it. Change it on the
+   repository first:
+
+     kopia repository change-password

@@ -1,0 +1,41 @@
+{{- $p := .Values.ui.persistence.cache }}
+{{- /* Only in cronjob mode: server mode uses persistence.state, the one
+       claim its single pod needs. */}}
+{{- if and (eq .Values.mode "cronjob") .Values.ui.enabled $p.enabled (not $p.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "kopia.uiCacheClaimName" . }}
+  labels:
+    {{- include "kopia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+  {{- /*
+    A second cache, deliberately not shared with the backup Job: two kopia
+    processes on one config file and one cache directory is undefined, and
+    ReadWriteOnce does not prevent it - access modes are enforced per node,
+    not per pod.
+
+    retain wins over anything commonAnnotations sets on the same key.
+  */}}
+  {{- $ann := merge (dict) ($p.annotations | default dict) (.Values.commonAnnotations | default dict) }}
+  {{- if $p.retain }}
+  {{- $_ := set $ann "helm.sh/resource-policy" "keep" }}
+  {{- end }}
+  {{- with $ann }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  accessModes:
+    {{- toYaml $p.accessModes | nindent 4 }}
+  {{- if $p.storageClassName }}
+  {{- if eq $p.storageClassName "-" }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: {{ $p.storageClassName | quote }}
+  {{- end }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $p.size | quote }}
+{{- end }}

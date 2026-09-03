@@ -1,0 +1,56 @@
+{{- if and (include "kopia.serverEnabled" .) .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "kopia.uiFullname" . }}
+  labels:
+    {{- include "kopia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "kopia.componentLabels" (dict "ctx" . "component" "ui") | nindent 6 }}
+  policyTypes:
+    - Ingress
+    {{- if .Values.networkPolicy.egress }}
+    - Egress
+    {{- end }}
+  ingress:
+    {{- /*
+      WARNING: an ingress rule with ports and no `from` matches every source in
+      the cluster. With networkPolicy.uiIngressFrom empty this restricts the
+      port number and nothing else - which is not the same as restricting who
+      can reach the UI.
+    */}}
+    - ports:
+        {{- /*
+          51515 is the container port, not ui.service.port: a NetworkPolicy
+          matches the port the pod listens on, and the Service maps its own
+          port onto the named target.
+        */}}
+        - port: 51515
+          protocol: TCP
+      {{- with .Values.networkPolicy.uiIngressFrom }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- with .Values.networkPolicy.egress }}
+  egress:
+    {{- toYaml . | nindent 4 }}
+    {{- if $.Values.networkPolicy.allowDNS }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    {{- end }}
+  {{- end }}
+{{- end }}

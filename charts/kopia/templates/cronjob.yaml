@@ -1,0 +1,160 @@
+{{- if eq .Values.mode "cronjob" }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "kopia.fullname" . }}
+  labels:
+    {{- include "kopia.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  schedule: {{ .Values.schedule | quote }}
+  {{- /*
+    Kubernetes 1.25+. Omitted entirely when empty, so the chart still renders on
+    1.21 — the schedule is then interpreted in the kube-controller-manager's
+    timezone, which is usually UTC and rarely what you meant.
+  */}}
+  {{- with .Values.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  suspend: {{ .Values.suspend }}
+  {{- /*
+    Forbid, always, while the state volume is a single claim: two runs would
+    share one cache directory and one repository config. Enforced in
+    kopia.validate as well.
+  */}}
+  concurrencyPolicy: {{ .Values.concurrencyPolicy }}
+  {{- /*
+    Bounds how far back the controller looks for missed schedules. Without it,
+    a backup that overruns its window repeatedly can accumulate 100 misses and
+    the controller stops scheduling the CronJob altogether.
+  */}}
+  startingDeadlineSeconds: {{ .Values.startingDeadlineSeconds }}
+  successfulJobsHistoryLimit: {{ .Values.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.failedJobsHistoryLimit }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "kopia.labels" . | nindent 8 }}
+    spec:
+      backoffLimit: {{ .Values.backoffLimit }}
+      {{- with .Values.activeDeadlineSeconds }}
+      {{- /*
+        A hard kill. Kopia checkpoints as it goes and the next run resumes from
+        those, so this costs progress rather than data — but the first run over
+        500 GB of new content can easily exceed a day. Raise it or blank it out
+        before seeding.
+      */}}
+      activeDeadlineSeconds: {{ . }}
+      {{- end }}
+      {{- with .Values.ttlSecondsAfterFinished }}
+      ttlSecondsAfterFinished: {{ . }}
+      {{- end }}
+      template:
+        metadata:
+          labels:
+            {{- /*
+              The component label separates these pods from the optional UI
+              Deployment, so the deny-all NetworkPolicy below can apply to the
+              backup pod without also cutting the Ingress off from the UI.
+            */}}
+            {{- include "kopia.componentLabels" (dict "ctx" . "component" "backup") | nindent 12 }}
+            {{- with .Values.commonLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- with .Values.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- /* podAnnotations wins over commonAnnotations on a shared key. */}}
+          {{- $ann := merge (dict) (.Values.podAnnotations | default dict) (.Values.commonAnnotations | default dict) }}
+          {{- with $ann }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "kopia.serviceAccountName" . }}
+          automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+          terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+
+          {{- with .Values.priorityClassName }}
+          priorityClassName: {{ . | quote }}
+          {{- end }}
+
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with .Values.podSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with .Values.initContainers }}
+          initContainers:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          containers:
+            - name: {{ .Chart.Name }}
+              image: {{ include "kopia.image" . | quote }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+              {{- with .Values.securityContext }}
+              securityContext:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+
+              {{- /*
+                The image entrypoint is /bin/kopia, so both command and args
+                have to be replaced to run a script instead.
+              */}}
+              command:
+                - /bin/sh
+                - /scripts/backup.sh
+              args: []
+
+              env:
+                {{- include "kopia.env" . | trim | nindent 16 }}
+
+              {{- with .Values.envFrom }}
+              envFrom:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+                {{- include "kopia.volumeMounts" . | trim | nindent 16 }}
+
+              {{- with .Values.resources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+
+          volumes:
+            - name: scripts
+              configMap:
+                name: {{ include "kopia.fullname" . }}-scripts
+                defaultMode: 0555
+            {{- include "kopia.volumes" . | trim | nindent 12 }}
+
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

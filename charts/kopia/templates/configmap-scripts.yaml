@@ -1,0 +1,384 @@
+{{- /* This object renders in every mode, so validation belongs here rather
+       than on the CronJob, which server mode does not render at all. */}}
+{{- include "kopia.validate" . }}
+{{- $paths := include "kopia.snapshotPaths" . | fromJsonArray }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kopia.fullname" . }}-scripts
+  labels:
+    {{- include "kopia.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+{{- /* backup.sh only exists in cronjob mode; in server mode kopia's own
+       scheduler takes the snapshots and there is no Job to run a script. */}}
+{{- if eq .Values.mode "cronjob" }}
+  backup.sh: |
+    #!/bin/sh
+    # Rendered by the kopia chart {{ .Chart.Version }}. Editing this ConfigMap
+    # by hand is pointless: `helm upgrade` regenerates it.
+    #
+    # The image entrypoint is /bin/kopia, so the CronJob overrides `command`
+    # to run this instead.
+    set -eu
+
+    say() { printf '%s  %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*"; }
+    die() { say "ERROR: $*" >&2; exit 1; }
+
+    STATE_DIR={{ .Values.stateDir | quote }}
+    FINGERPRINT={{ include "kopia.connectionFingerprint" . | quote }}
+    FINGERPRINT_FILE="$STATE_DIR/connection.fingerprint"
+    IDENT_HOST={{ include "kopia.identityHostname" . | quote }}
+    IDENT_USER={{ include "kopia.identityUsername" . | quote }}
+
+    mkdir -p "$STATE_DIR/config" "$STATE_DIR/cache" "$KOPIA_LOG_DIR"
+
+    [ -n "${KOPIA_PASSWORD:-}" ] || die "KOPIA_PASSWORD is empty. Key {{ .Values.auth.keys.password }} in Secret {{ .Values.auth.existingSecret }} is missing or blank."
+
+    # Build and run `kopia repository create|connect sftp` with one flag set.
+    #
+    # `set --` is the POSIX way to hold an argument list; note the `if`/`fi`
+    # rather than `[ x ] && set -- ...`, which would return non-zero on a false
+    # test and take the whole script down under `set -e`.
+    repo_cmd() {
+      op="$1"
+      set -- "$op" sftp \
+        --path={{ .Values.sftp.path | quote }} \
+        --host={{ .Values.sftp.host | quote }} \
+        --port={{ .Values.sftp.port | quote }} \
+        --username={{ .Values.sftp.username | quote }}
+    {{- if .Values.auth.keys.sshPrivateKey }}
+      set -- "$@" --keyfile=/kopia-ssh/id_key --known-hosts=/kopia-ssh/known_hosts
+    {{- end }}
+    {{- if .Values.auth.keys.sftpPassword }}
+      # The password reaches kopia as a flag, so it is visible in this
+      # container's own process list. Key auth avoids that entirely.
+      set -- "$@" --sftp-password="$CHART_SFTP_PASSWORD"
+    {{- end }}
+      if [ "$op" = "connect" ]; then
+        # --override-hostname/--override-username are what keep every night's
+        # snapshot under one source identity. Without them the pod's random
+        # name becomes the hostname and retention never prunes anything.
+        set -- "$@" \
+          --override-hostname="$IDENT_HOST" \
+          --override-username="$IDENT_USER" \
+          --cache-directory="$KOPIA_CACHE_DIRECTORY" \
+          --content-cache-size-mb={{ .Values.cache.contentCacheSizeMB }} \
+          --metadata-cache-size-mb={{ .Values.cache.metadataCacheSizeMB }}
+      fi
+      kopia repository "$@"
+    }
+
+    connected() { kopia repository status >/dev/null 2>&1; }
+
+    # The connection lives in a config file on the state volume and outlives
+    # every run, so a changed sftp.* value in values.yaml would otherwise be
+    # ignored forever. Compare against the fingerprint written last time.
+    if connected; then
+      if [ "$(cat "$FINGERPRINT_FILE" 2>/dev/null || true)" != "$FINGERPRINT" ]; then
+        say "connection settings changed since the last run - reconnecting"
+        kopia repository disconnect || true
+      fi
+    fi
+
+    if ! connected; then
+      say "connecting to sftp://{{ .Values.sftp.username }}@{{ .Values.sftp.host }}:{{ .Values.sftp.port }}{{ .Values.sftp.path }}"
+      if ! repo_cmd connect; then
+    {{- if .Values.repository.createIfMissing }}
+        # Reached only when connect failed, which normally means there is no
+        # repository at that path yet. It also means a TYPO in sftp.path lands
+        # here: kopia would happily create an empty repository somewhere else
+        # and upload everything into it. Turn createIfMissing back off once the
+        # first run succeeds.
+        say "connect failed and repository.createIfMissing is true - creating a new repository"
+        repo_cmd create
+        # `create` connects with the pod's own identity; reconnect to apply the
+        # overrides.
+        kopia repository disconnect
+        repo_cmd connect
+    {{- else }}
+        die "cannot connect to the repository at {{ .Values.sftp.path }} on {{ .Values.sftp.host }}. If it does not exist yet, set repository.createIfMissing=true for one run - see README, 'Creating the repository'."
+    {{- end }}
+      fi
+      printf '%s' "$FINGERPRINT" > "$FINGERPRINT_FILE"
+    fi
+
+    say "connected as $IDENT_USER@$IDENT_HOST"
+    kopia repository status
+
+    {{- if .Values.maintenance.enabled }}
+
+    # Kopia schedules its own maintenance; this only tells it when, and that
+    # this client is the one allowed to run it. --owner=me takes ownership away
+    # from any other client currently holding it.
+    say "configuring maintenance"
+    kopia maintenance set \
+      --owner=me \
+      --enable-quick={{ .Values.maintenance.quick }} \
+      --enable-full={{ .Values.maintenance.full }} \
+      --quick-interval={{ .Values.maintenance.quickInterval }} \
+      --full-interval={{ .Values.maintenance.fullInterval }}
+    {{- end }}
+
+    {{- if .Values.policy.apply }}
+
+    # Policies live in the repository, not here, so this overwrites whatever
+    # was set through the UI or CLI on every run. That is the point - the chart
+    # is the source of truth - but it is worth knowing before you edit a policy
+    # by hand and watch it revert at 03:00.
+    for p in {{ range $paths }}{{ . | quote }} {{ end }}; do
+      say "applying policy to $IDENT_USER@$IDENT_HOST:$p"
+      set -- "$IDENT_USER@$IDENT_HOST:$p" \
+        --compression={{ .Values.policy.compression }} \
+        --keep-latest={{ .Values.policy.retention.keepLatest }} \
+        --keep-hourly={{ .Values.policy.retention.keepHourly }} \
+        --keep-daily={{ .Values.policy.retention.keepDaily }} \
+        --keep-weekly={{ .Values.policy.retention.keepWeekly }} \
+        --keep-monthly={{ .Values.policy.retention.keepMonthly }} \
+        --keep-annual={{ .Values.policy.retention.keepAnnual }}
+    {{- /*
+      Accepts a boolean or one of "true"/"false"/"inherit". `with` alone would
+      be wrong: Go templates treat boolean false as empty, so
+      ignoreFileErrors: false would silently emit no flag at all instead of
+      the flag it asked for.
+    */}}
+    {{- $ife := .Values.policy.ignoreFileErrors }}
+    {{- if kindIs "bool" $ife }}{{ $ife = ternary "true" "false" $ife }}{{ end }}
+    {{- if $ife }}
+      set -- "$@" --ignore-file-errors={{ $ife }}
+    {{- end }}
+    {{- $ide := .Values.policy.ignoreDirErrors }}
+    {{- if kindIs "bool" $ide }}{{ $ide = ternary "true" "false" $ide }}{{ end }}
+    {{- if $ide }}
+      set -- "$@" --ignore-dir-errors={{ $ide }}
+    {{- end }}
+    {{- if .Values.policy.ignore }}
+      # --add-ignore appends, so clear first: otherwise the list grows by one
+      # copy of every rule on every run.
+      set -- "$@" --clear-ignore
+      {{- range .Values.policy.ignore }}
+      set -- "$@" --add-ignore={{ . | quote }}
+      {{- end }}
+    {{- end }}
+    {{- range .Values.policy.extraArgs }}
+      set -- "$@" {{ . | quote }}
+    {{- end }}
+      kopia policy set "$@"
+    done
+    {{- end }}
+
+    say "starting snapshot"
+    set -- --parallel={{ .Values.snapshot.parallel }}
+    {{- with .Values.snapshot.description }}
+    set -- "$@" --description={{ . | quote }}
+    {{- end }}
+    {{- with .Values.snapshot.checkpointInterval }}
+    set -- "$@" --checkpoint-interval={{ . }}
+    {{- end }}
+    {{- range .Values.snapshot.extraArgs }}
+    set -- "$@" {{ . | quote }}
+    {{- end }}
+    kopia snapshot create "$@" {{ range $paths }}{{ . | quote }} {{ end }}
+
+    say "listing recent snapshots"
+    kopia snapshot list --all || true
+
+    say "done"
+{{- end }}
+{{- if include "kopia.serverEnabled" . }}
+{{- $readOnly := include "kopia.serverReadOnly" . }}
+  ui.sh: |
+    #!/bin/sh
+    # Rendered by the kopia chart {{ .Chart.Version }}, mode={{ .Values.mode }}.
+    #
+    # Connects the repository, then hands the process over to
+    # `kopia server start`. Two steps rather than one because the server reads
+    # an already-connected config file; it does not take repository flags.
+    set -eu
+
+    say() { printf '%s  %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*"; }
+    die() { say "ERROR: $*" >&2; exit 1; }
+
+    STATE_DIR={{ .Values.stateDir | quote }}
+    FINGERPRINT={{ include "kopia.uiConnectionFingerprint" . | quote }}
+    FINGERPRINT_FILE="$STATE_DIR/connection.fingerprint"
+    IDENT_HOST={{ include "kopia.serverIdentityHostname" . | quote }}
+    IDENT_USER={{ include "kopia.serverIdentityUsername" . | quote }}
+
+    mkdir -p "$STATE_DIR/config" "$STATE_DIR/cache" "$KOPIA_LOG_DIR"
+
+    [ -n "${KOPIA_PASSWORD:-}" ] || die "KOPIA_PASSWORD is empty. Key {{ .Values.auth.keys.password }} in Secret {{ .Values.auth.existingSecret }} is missing or blank."
+
+    repo_cmd() {
+      op="$1"
+      set -- "$op" sftp \
+        --path={{ .Values.sftp.path | quote }} \
+        --host={{ .Values.sftp.host | quote }} \
+        --port={{ .Values.sftp.port | quote }} \
+        --username={{ .Values.sftp.username | quote }}
+    {{- if .Values.auth.keys.sshPrivateKey }}
+      set -- "$@" --keyfile=/kopia-ssh/id_key --known-hosts=/kopia-ssh/known_hosts
+    {{- end }}
+    {{- if .Values.auth.keys.sftpPassword }}
+      set -- "$@" --sftp-password="$CHART_SFTP_PASSWORD"
+    {{- end }}
+      if [ "$op" = "connect" ]; then
+        set -- "$@" \
+          --override-hostname="$IDENT_HOST" \
+          --override-username="$IDENT_USER" \
+          --cache-directory="$KOPIA_CACHE_DIRECTORY" \
+          --content-cache-size-mb={{ include "kopia.serverContentCacheMB" . }} \
+          --metadata-cache-size-mb={{ include "kopia.serverMetadataCacheMB" . }}
+    {{- if $readOnly }}
+        # Applied to the connection itself, not only to the server process, so
+        # nothing this pod runs can write to the repository.
+        set -- "$@" --readonly
+    {{- end }}
+      fi
+      kopia repository "$@"
+    }
+
+    connected() { kopia repository status >/dev/null 2>&1; }
+
+    if connected; then
+      if [ "$(cat "$FINGERPRINT_FILE" 2>/dev/null || true)" != "$FINGERPRINT" ]; then
+        say "connection settings changed - reconnecting"
+        kopia repository disconnect || true
+      fi
+    fi
+
+    if ! connected; then
+      say "connecting {{ if $readOnly }}read-only {{ end }}to sftp://{{ .Values.sftp.username }}@{{ .Values.sftp.host }}:{{ .Values.sftp.port }}{{ .Values.sftp.path }}"
+      if ! repo_cmd connect; then
+    {{- if and .Values.repository.createIfMissing (not $readOnly) }}
+        say "connect failed and repository.createIfMissing is true - creating a new repository"
+        repo_cmd create
+        kopia repository disconnect
+        repo_cmd connect
+    {{- else }}
+        die "cannot connect to the repository at {{ .Values.sftp.path }} on {{ .Values.sftp.host }}."
+    {{- end }}
+      fi
+      printf '%s' "$FINGERPRINT" > "$FINGERPRINT_FILE"
+    fi
+
+    say "connected as $IDENT_USER@$IDENT_HOST"
+
+    {{- if and (eq .Values.mode "server") .Values.maintenance.enabled }}
+
+    # In server mode this pod is the backup client, so it owns maintenance too.
+    say "configuring maintenance"
+    kopia maintenance set \
+      --owner=me \
+      --enable-quick={{ .Values.maintenance.quick }} \
+      --enable-full={{ .Values.maintenance.full }} \
+      --quick-interval={{ .Values.maintenance.quickInterval }} \
+      --full-interval={{ .Values.maintenance.fullInterval }}
+    {{- end }}
+
+    # 51515 is the container port and is deliberately not templated: a
+    # NetworkPolicy matches the port the pod listens on, so tying it to
+    # ui.service.port would break the policy the moment the Service moved.
+    set -- server start --ui --address=0.0.0.0:51515
+    {{- if $readOnly }}
+    set -- "$@" --readonly
+    {{- end }}
+    {{- if eq .Values.ui.tls.mode "existing" }}
+    set -- "$@" --tls-cert-file=/kopia-tls/tls.crt --tls-key-file=/kopia-tls/tls.key
+    {{- else }}
+    # kopia server refuses a non-loopback address without a certificate.
+    # --insecure is correct here only because TLS terminates at the Ingress.
+    set -- "$@" --insecure
+    {{- end }}
+    {{- if .Values.ui.auth.passwordKey }}
+    # The password reaches kopia as a flag, so it is visible in this
+    # container's own process list. There is one process here and nothing else
+    # can read it.
+    set -- "$@" --server-username={{ .Values.ui.auth.username | quote }} --server-password="$KOPIA_UI_PASSWORD"
+    {{- else }}
+    set -- "$@" --without-password
+    {{- end }}
+    {{- if .Values.ui.disableCSRFChecks }}
+    set -- "$@" --disable-csrf-token-checks
+    {{- end }}
+    {{- range .Values.ui.extraArgs }}
+    set -- "$@" {{ . | quote }}
+    {{- end }}
+
+    say "starting kopia server on :51515"
+    exec kopia "$@"
+{{- end }}
+{{- if .Values.verify.enabled }}
+  verify.sh: |
+    #!/bin/sh
+    # Rendered by the kopia chart {{ .Chart.Version }}.
+    #
+    # Reads data back out of the repository and checks it against its hashes,
+    # then dumps the repository-side policy configuration. Read-only
+    # throughout: this Job can neither delete a snapshot nor take maintenance
+    # ownership from whatever is taking the backups.
+    #
+    # Its value is that it FAILS VISIBLY. In server mode nothing else does.
+    set -eu
+
+    say() { printf '%s  %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*"; }
+    die() { say "ERROR: $*" >&2; exit 1; }
+
+    STATE_DIR=/tmp/kopia-verify
+    mkdir -p "$STATE_DIR/config" "$STATE_DIR/cache" "$KOPIA_LOG_DIR"
+
+    [ -n "${KOPIA_PASSWORD:-}" ] || die "KOPIA_PASSWORD is empty. Key {{ .Values.auth.keys.password }} in Secret {{ .Values.auth.existingSecret }} is missing or blank."
+
+    # Everything in the pod's own emptyDir, connected fresh each run. A warm
+    # cache would buy nothing here: verification reads content it has not read
+    # before.
+    set -- connect sftp \
+      --path={{ .Values.sftp.path | quote }} \
+      --host={{ .Values.sftp.host | quote }} \
+      --port={{ .Values.sftp.port | quote }} \
+      --username={{ .Values.sftp.username | quote }} \
+      --override-hostname={{ printf "%s-verify" (include "kopia.fullname" .) | quote }} \
+      --override-username={{ include "kopia.identityUsername" . | quote }} \
+      --cache-directory="$KOPIA_CACHE_DIRECTORY" \
+      --readonly
+    {{- if .Values.auth.keys.sshPrivateKey }}
+    set -- "$@" --keyfile=/kopia-ssh/id_key --known-hosts=/kopia-ssh/known_hosts
+    {{- end }}
+    {{- if .Values.auth.keys.sftpPassword }}
+    set -- "$@" --sftp-password="$CHART_SFTP_PASSWORD"
+    {{- end }}
+
+    say "connecting read-only to sftp://{{ .Values.sftp.username }}@{{ .Values.sftp.host }}:{{ .Values.sftp.port }}{{ .Values.sftp.path }}"
+    kopia repository "$@"
+    kopia repository status
+
+    say "snapshots in the repository:"
+    kopia snapshot list --all
+
+    {{- if .Values.verify.exportPolicies }}
+
+    # Exported before verification, not after: verification is the slow part
+    # and the part that can fail, and losing the policy dump to an unrelated
+    # failure would be a poor trade.
+    say "exporting policies"
+    echo "----- BEGIN POLICY EXPORT -----"
+    kopia policy export
+    echo "----- END POLICY EXPORT -----"
+    {{- with .Values.verify.exportPath }}
+    kopia policy export > {{ . | quote }}
+    say "policies also written to {{ . }}"
+    {{- end }}
+    {{- end }}
+
+    {{- if eq (.Values.verify.percent | float64) 0.0 }}
+    say "structural verification: checking every content referenced by every snapshot exists"
+    {{- else }}
+    say "structural verification, plus downloading {{ .Values.verify.percent }}% of files to re-hash them"
+    {{- end }}
+    kopia snapshot verify --verify-files-percent={{ .Values.verify.percent }} --max-errors={{ .Values.verify.maxErrors }} {{ range .Values.verify.extraArgs }}{{ . | quote }} {{ end }}
+
+    say "done - repository verified"
+{{- end }}

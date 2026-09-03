@@ -1,0 +1,26 @@
+{{- if include "kopia.serverEnabled" . }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kopia.uiFullname" . }}
+  labels:
+    {{- include "kopia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+  {{- $ann := merge (dict) (.Values.ui.service.annotations | default dict) (.Values.commonAnnotations | default dict) }}
+  {{- with $ann }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.ui.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.ui.service.port }}
+      targetPort: http
+      protocol: TCP
+      {{- if and (eq .Values.ui.service.type "NodePort") .Values.ui.service.nodePort }}
+      nodePort: {{ .Values.ui.service.nodePort }}
+      {{- end }}
+  selector:
+    {{- include "kopia.componentLabels" (dict "ctx" . "component" "ui") | nindent 4 }}
+{{- end }}

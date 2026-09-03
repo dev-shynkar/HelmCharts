@@ -1,0 +1,917 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "kopia values",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": [
+        "cronjob",
+        "server"
+      ],
+      "description": "cronjob: a CronJob takes snapshots on schedule.yaml's schedule. server: one writable kopia server manages sources, schedules and policies from the browser."
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        },
+        "tag": {
+          "type": "string"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^$|^sha256:[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "repository"
+      ]
+    },
+    "imagePullSecrets": {
+      "type": "array"
+    },
+    "nameOverride": {
+      "type": "string"
+    },
+    "fullnameOverride": {
+      "type": "string"
+    },
+    "commonLabels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Labels added to every rendered object. Never merged into the selector labels the NetworkPolicy matches on."
+    },
+    "commonAnnotations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Annotations added to every rendered object. On the state PVC, persistence.state.retain still wins over helm.sh/resource-policy."
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": {
+          "type": "boolean"
+        },
+        "automount": {
+          "type": "boolean"
+        },
+        "annotations": {
+          "type": "object"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "schedule": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Standard five-field cron expression."
+    },
+    "timeZone": {
+      "type": "string",
+      "description": "IANA name, e.g. Europe/Kyiv. Needs Kubernetes 1.25+; omitted from the manifest when empty."
+    },
+    "suspend": {
+      "type": "boolean"
+    },
+    "concurrencyPolicy": {
+      "type": "string",
+      "enum": [
+        "Allow",
+        "Forbid",
+        "Replace"
+      ],
+      "description": "Rejected at render time unless Forbid while persistence.state is enabled: two runs would share one cache directory and one repository config."
+    },
+    "startingDeadlineSeconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "successfulJobsHistoryLimit": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "failedJobsHistoryLimit": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "backoffLimit": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "activeDeadlineSeconds": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 60
+        },
+        {
+          "type": "string",
+          "maxLength": 0
+        }
+      ],
+      "description": "Hard kill. Empty for no limit. The first run over a large source can exceed a day."
+    },
+    "ttlSecondsAfterFinished": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "string",
+          "maxLength": 0
+        }
+      ]
+    },
+    "terminationGracePeriodSeconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "podAnnotations": {
+      "type": "object"
+    },
+    "podLabels": {
+      "type": "object"
+    },
+    "podSecurityContext": {
+      "type": "object"
+    },
+    "securityContext": {
+      "type": "object"
+    },
+    "resources": {
+      "type": "object"
+    },
+    "sftp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "username": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^$|^/",
+          "description": "Absolute path of the repository directory on the SFTP server. It must already exist."
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "existingSecret": {
+          "type": "string",
+          "description": "Required. The chart never creates or generates credentials."
+        },
+        "keys": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "password": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sshPrivateKey": {
+              "type": "string"
+            },
+            "knownHosts": {
+              "type": "string",
+              "description": "Required alongside sshPrivateKey: kopia verifies the SFTP host key and has no flag to skip it."
+            },
+            "sftpPassword": {
+              "type": "string",
+              "description": "Password auth. Kopia takes it as a command-line flag, so it is visible in the container's process list; prefer a key."
+            }
+          }
+        }
+      }
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "createIfMissing": {
+          "type": "boolean",
+          "description": "Also fires on a typo in sftp.path, creating an empty repository at the wrong place. Turn on for the first run only."
+        }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hostname": {
+          "type": "string",
+          "description": "Overrides the pod's random hostname so every run files snapshots under one source. Defaults to the release fullname."
+        },
+        "username": {
+          "type": "string"
+        }
+      }
+    },
+    "stateDir": {
+      "type": "string",
+      "pattern": "^/"
+    },
+    "cache": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contentCacheSizeMB": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "metadataCacheSizeMB": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+            "description": "Becomes the Kubernetes volume name and the default mount path."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "hostPath",
+              "pvc"
+            ]
+          },
+          "hostPath": {
+            "type": "string",
+            "pattern": "^$|^/"
+          },
+          "hostPathType": {
+            "type": "string",
+            "enum": [
+              "Directory",
+              "DirectoryOrCreate"
+            ],
+            "description": "Directory refuses to start the pod when the path is missing. DirectoryOrCreate creates an empty one, which kopia then snapshots as a success."
+          },
+          "existingClaim": {
+            "type": "string"
+          },
+          "mountPath": {
+            "type": "string",
+            "pattern": "^$|^/"
+          },
+          "subPath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    "snapshotPaths": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^/"
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "parallel": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128
+        },
+        "description": {
+          "type": "string"
+        },
+        "checkpointInterval": {
+          "type": "string",
+          "pattern": "^$|^[0-9]+[smh]$",
+          "description": "Go duration, 45m or less."
+        },
+        "extraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "apply": {
+          "type": "boolean",
+          "description": "Rewrites the repository-side policy on every run, so a policy edited by hand reverts at the next backup."
+        },
+        "compression": {
+          "type": "string",
+          "minLength": 1,
+          "description": "none for photos and video - they are already compressed. zstd-fastest for documents or dumps."
+        },
+        "retention": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "keepLatest": {
+              "$ref": "#/definitions/retentionCount"
+            },
+            "keepHourly": {
+              "$ref": "#/definitions/retentionCount"
+            },
+            "keepDaily": {
+              "$ref": "#/definitions/retentionCount"
+            },
+            "keepWeekly": {
+              "$ref": "#/definitions/retentionCount"
+            },
+            "keepMonthly": {
+              "$ref": "#/definitions/retentionCount"
+            },
+            "keepAnnual": {
+              "$ref": "#/definitions/retentionCount"
+            }
+          }
+        },
+        "ignore": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ignoreFileErrors": {
+          "$ref": "#/definitions/tristate"
+        },
+        "ignoreDirErrors": {
+          "$ref": "#/definitions/tristate"
+        },
+        "extraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "maintenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "quick": {
+          "type": "boolean"
+        },
+        "full": {
+          "type": "boolean",
+          "description": "Off means retention marks snapshots for deletion but no blob is ever freed - the repository grows forever."
+        },
+        "quickInterval": {
+          "$ref": "#/definitions/duration"
+        },
+        "fullInterval": {
+          "$ref": "#/definitions/duration"
+        }
+      }
+    },
+    "verify": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "A verification CronJob independent of how backups are taken. In server mode it is the only workload that fails visibly."
+        },
+        "schedule": {
+          "type": "string"
+        },
+        "timeZone": {
+          "type": "string"
+        },
+        "suspend": {
+          "type": "boolean"
+        },
+        "percent": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            {
+              "type": "string",
+              "pattern": "^(100|[0-9]{1,2})(\\.[0-9]+)?$"
+            }
+          ]
+        },
+        "extraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exportPolicies": {
+          "type": "boolean"
+        },
+        "exportPath": {
+          "type": "string",
+          "pattern": "^$|^/"
+        },
+        "backoffLimit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "activeDeadlineSeconds": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 60
+            },
+            {
+              "type": "string",
+              "maxLength": 0
+            }
+          ]
+        },
+        "ttlSecondsAfterFinished": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "string",
+              "maxLength": 0
+            }
+          ]
+        },
+        "startingDeadlineSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "successfulJobsHistoryLimit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failedJobsHistoryLimit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nodeSelector": {
+          "type": "object"
+        },
+        "resources": {
+          "type": "object"
+        },
+        "extraVolumes": {
+          "type": "array"
+        },
+        "extraVolumeMounts": {
+          "type": "array"
+        },
+        "maxErrors": {
+          "type": "integer",
+          "minimum": -1,
+          "description": "Errors to collect before stopping. Kopia's 0 is rewritten to 1 internally, i.e. stop at the first bad file; negative is unlimited. The run fails either way."
+        }
+      }
+    },
+    "persistence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "state": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "existingClaim": {
+              "type": "string"
+            },
+            "claimName": {
+              "type": "string"
+            },
+            "storageClassName": {
+              "type": "string"
+            },
+            "accessModes": {
+              "$ref": "#/definitions/accessModes"
+            },
+            "size": {
+              "$ref": "#/definitions/quantity"
+            },
+            "annotations": {
+              "type": "object"
+            },
+            "retain": {
+              "type": "boolean",
+              "description": "Adds helm.sh/resource-policy: keep so helm uninstall leaves the claim behind."
+            }
+          }
+        }
+      }
+    },
+    "env": {
+      "type": "object"
+    },
+    "extraEnv": {
+      "type": "array"
+    },
+    "envFrom": {
+      "type": "array"
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "egress": {
+          "type": "array",
+          "description": "Empty leaves egress unrestricted - the Egress policyType is not declared at all. One rule denies everything else, DNS and the SFTP server included."
+        },
+        "allowDNS": {
+          "type": "boolean"
+        },
+        "uiIngressFrom": {
+          "type": "array",
+          "description": "Who may reach the UI. Empty means the usual trap: a rule with ports and no `from` matches every source in the cluster."
+        }
+      }
+    },
+    "nodeSelector": {
+      "type": "object"
+    },
+    "tolerations": {
+      "type": "array"
+    },
+    "affinity": {
+      "type": "object"
+    },
+    "priorityClassName": {
+      "type": "string"
+    },
+    "extraVolumes": {
+      "type": "array"
+    },
+    "extraVolumeMounts": {
+      "type": "array"
+    },
+    "initContainers": {
+      "type": "array"
+    },
+    "tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "runAsUser": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "readOnly": {
+          "type": "boolean",
+          "description": "Read-only repository connection. The server then cannot delete snapshots, edit policies or take maintenance ownership from the backup Job."
+        },
+        "acknowledgeWritable": {
+          "type": "boolean",
+          "description": "Required alongside readOnly: false."
+        },
+        "identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hostname": {
+              "type": "string"
+            },
+            "username": {
+              "type": "string"
+            }
+          }
+        },
+        "auth": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "passwordKey": {
+              "type": "string",
+              "description": "Key in auth.existingSecret holding the UI password. Empty starts the server with --without-password: no authentication at all."
+            },
+            "username": {
+              "type": "string"
+            }
+          }
+        },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "insecure",
+                "existing"
+              ],
+              "description": "insecure = HTTP inside the cluster, TLS at the Ingress. existing = serve HTTPS from a mounted cert Secret."
+            },
+            "existingSecret": {
+              "type": "string"
+            }
+          }
+        },
+        "disableCSRFChecks": {
+          "type": "boolean"
+        },
+        "extraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "service": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "ClusterIP",
+                "NodePort",
+                "LoadBalancer"
+              ]
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "annotations": {
+              "type": "object"
+            },
+            "nodePort": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 30000,
+                  "maximum": 32767
+                },
+                {
+                  "type": "string",
+                  "maxLength": 0
+                }
+              ]
+            }
+          }
+        },
+        "ingress": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "className": {
+              "type": "string"
+            },
+            "annotations": {
+              "type": "object"
+            },
+            "hosts": {
+              "type": "array"
+            },
+            "tls": {
+              "type": "array"
+            }
+          }
+        },
+        "persistence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cache": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "existingClaim": {
+                  "type": "string"
+                },
+                "claimName": {
+                  "type": "string"
+                },
+                "storageClassName": {
+                  "type": "string"
+                },
+                "accessModes": {
+                  "$ref": "#/definitions/accessModes"
+                },
+                "size": {
+                  "$ref": "#/definitions/quantity"
+                },
+                "annotations": {
+                  "type": "object"
+                },
+                "retain": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "cache": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "contentCacheSizeMB": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "metadataCacheSizeMB": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "resources": {
+          "type": "object"
+        },
+        "startupProbe": {
+          "type": "object"
+        },
+        "readinessProbe": {
+          "type": "object"
+        },
+        "livenessProbe": {
+          "type": "object"
+        },
+        "revisionHistoryLimit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nodeSelector": {
+          "type": "object"
+        },
+        "affinity": {
+          "type": "object"
+        },
+        "extraVolumes": {
+          "type": "array"
+        },
+        "extraVolumeMounts": {
+          "type": "array"
+        }
+      }
+    },
+    "restore": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "hostPath",
+            "pvc"
+          ]
+        },
+        "hostPath": {
+          "type": "string",
+          "pattern": "^$|^/"
+        },
+        "hostPathType": {
+          "type": "string",
+          "enum": [
+            "Directory",
+            "DirectoryOrCreate"
+          ],
+          "description": "DirectoryOrCreate makes a root-owned directory the pod cannot write to."
+        },
+        "existingClaim": {
+          "type": "string"
+        },
+        "mountPath": {
+          "type": "string",
+          "pattern": "^/"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "retentionCount": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "string",
+          "enum": [
+            "inherit"
+          ]
+        }
+      ]
+    },
+    "tristate": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "",
+            "true",
+            "false",
+            "inherit"
+          ]
+        }
+      ],
+      "description": "Boolean, or one of \"true\"/\"false\"/\"inherit\" as a string. Empty leaves kopia's default, which fails the snapshot on an unreadable entry."
+    },
+    "duration": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)?[smh]$"
+    },
+    "accessModes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": [
+          "ReadWriteOnce",
+          "ReadOnlyMany",
+          "ReadWriteMany",
+          "ReadWriteOncePod"
+        ]
+      }
+    },
+    "quantity": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|k)?$"
+    }
+  }
+}

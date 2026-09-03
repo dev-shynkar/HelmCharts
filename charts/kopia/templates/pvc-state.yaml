@@ -1,0 +1,39 @@
+{{- $p := .Values.persistence.state }}
+{{- if and $p.enabled (not $p.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "kopia.stateClaimName" . }}
+  labels:
+    {{- include "kopia.labels" . | nindent 4 }}
+  {{- /*
+    Unlike duplicati's /data, nothing here is irreplaceable: the config file is
+    rebuilt by `repository connect` and the cache is just a cache. retain
+    defaults to true for consistency with the other charts in this repository,
+    and because rebuilding a cold cache over SFTP is slow enough to be worth
+    avoiding by accident.
+
+    retain wins over anything commonAnnotations sets on the same key.
+  */}}
+  {{- $ann := merge (dict) ($p.annotations | default dict) (.Values.commonAnnotations | default dict) }}
+  {{- if $p.retain }}
+  {{- $_ := set $ann "helm.sh/resource-policy" "keep" }}
+  {{- end }}
+  {{- with $ann }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  accessModes:
+    {{- toYaml $p.accessModes | nindent 4 }}
+  {{- if $p.storageClassName }}
+  {{- if eq $p.storageClassName "-" }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: {{ $p.storageClassName | quote }}
+  {{- end }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $p.size | quote }}
+{{- end }}

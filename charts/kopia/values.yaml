@@ -1,0 +1,790 @@
+# Kopia as a CronJob: snapshot local paths into an SFTP repository.
+#
+# The chart runs the official kopia/kopia image (Ubuntu-based, entrypoint
+# /bin/kopia, runs as root unless told otherwise) with a generated script in
+# place of the entrypoint. There is no Service, no Ingress and no web UI —
+# `kopia server` is a different deployment shape and deliberately not this
+# chart's job.
+#
+# Minimum working configuration: auth.existingSecret, sftp.*, sources, and
+# nodeSelector if any source is a hostPath.
+
+# How backups are taken.
+#
+#   cronjob  A Kubernetes CronJob runs `kopia snapshot create` on a schedule.
+#            Paths, schedule and retention all live in this file. A failed
+#            backup is a red Job you can alert on. The optional `ui` block adds
+#            a read-only window onto the repository.
+#
+#   server   One long-running `kopia server`, writable, with the source tree
+#            mounted. You add directories, pick a Snapshot Frequency and edit
+#            policies in the browser — the same experience as KopiaUI on
+#            Windows. No CronJob, and most of the cronjob-only settings below
+#            do nothing.
+#
+# The trade is visibility. In server mode a failed snapshot is a line in a
+# long-running pod's log while the pod still reports Ready; in cronjob mode it
+# is a Job in state Failed.
+#
+# One limit applies to both, and it is Kubernetes, not kopia: a container can
+# only see what is mounted into it. Even in server mode, adding a directory
+# that is not under one of the `sources` mounts means editing this file. Mount
+# the whole data disk (see `sources`) and everything under it becomes
+# selectable in the UI.
+mode: cronjob
+
+image:
+  repository: kopia/kopia
+  pullPolicy: IfNotPresent
+  # Defaults to Chart.AppVersion.
+  tag: ""
+  # Takes precedence over tag, e.g. "sha256:abc123...".
+  digest: ""
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Labels and annotations added to every object this chart renders.
+#
+# commonLabels deliberately does NOT reach the selector labels — the
+# NetworkPolicy podSelector matches on those, and folding arbitrary labels in
+# would quietly change what the policy covers.
+#
+# For the same reason the chart rejects app.kubernetes.io/name, /instance and
+# /component here and in podLabels: overriding one of those leaves the UI
+# Deployment unable to match its own pods, and it would create them endlessly
+# with nothing in the event log to explain it.
+commonLabels: {}
+commonAnnotations: {}
+
+serviceAccount:
+  create: true
+  # Kopia never talks to the Kubernetes API.
+  automount: false
+  annotations: {}
+  name: ""
+
+# ---------------------------------------------------------------------------
+# Schedule
+# ---------------------------------------------------------------------------
+
+# Standard cron syntax. Off the hour on purpose: 03:00 is when every other
+# scheduled job in a homelab also fires.
+schedule: "17 3 * * *"
+
+# Kubernetes 1.25+. Left empty the schedule runs in the controller manager's
+# timezone, which is usually UTC.
+timeZone: "Europe/Kyiv"
+
+suspend: false
+
+# Must stay Forbid while persistence.state is enabled — two runs would share
+# one cache directory and one repository config file. Note that ReadWriteOnce
+# does not prevent this: access modes are enforced per node, not per pod, so
+# two pods on the same node would both mount it happily.
+concurrencyPolicy: Forbid
+
+# How far back the controller looks for missed schedules. Without a bound, a
+# backup that repeatedly overruns its window accumulates 100 misses and the
+# controller then stops scheduling the CronJob entirely.
+startingDeadlineSeconds: 3600
+
+successfulJobsHistoryLimit: 3
+failedJobsHistoryLimit: 5
+
+# 1 = one retry, then wait for the next schedule. Kopia resumes cheaply from
+# its checkpoints, so a retry is rarely wasted work.
+backoffLimit: 1
+
+# A hard kill after 24 hours. It costs progress, not data — the next run picks
+# up from the last checkpoint — but the FIRST run over a large source can
+# exceed this easily. Raise it, or blank it out, before seeding.
+activeDeadlineSeconds: 86400
+
+# Delete finished Jobs after N seconds. Empty means keep them until the history
+# limits above push them out.
+ttlSecondsAfterFinished: ""
+
+# Kopia flushes and writes a checkpoint on SIGTERM, so give it room rather than
+# losing the run's progress at the default 30 seconds.
+terminationGracePeriodSeconds: 300
+
+podAnnotations: {}
+podLabels: {}
+
+# ---------------------------------------------------------------------------
+# Security
+# ---------------------------------------------------------------------------
+
+# The image has no USER directive, so without this it runs as root.
+#
+# fsGroup is what makes the state volume writable by the UID below. The source
+# mounts are NOT affected by it (fsGroup does not apply to hostPath), so this
+# UID must be able to read your photos — check with:
+#   stat -c '%U %G %a' /mnt/data/photos
+# Kopia treats an unreadable file as a snapshot error rather than skipping it
+# silently, so a permission problem fails the Job instead of producing a
+# quietly incomplete backup.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# Kopia needs no capabilities at all: it reads files, hashes them and speaks
+# SSH. Config, cache and logs are all redirected off the root filesystem, which
+# is why readOnlyRootFilesystem works here — /tmp is an emptyDir.
+#
+# If something ever crashloops at start, readOnlyRootFilesystem is the first
+# thing to turn off, not runAsNonRoot.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Hashing and compression are CPU-bound; the memory floor scales with how many
+# files are in flight (snapshot.parallel below), not with total size.
+#
+# The 2Gi limit is a homelab default. An OOMKill mid-snapshot is not a
+# catastrophe — kopia resumes from its last checkpoint — but it will keep
+# happening every night until you raise it.
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: "2000m"
+    memory: 2Gi
+
+# ---------------------------------------------------------------------------
+# Repository
+# ---------------------------------------------------------------------------
+
+sftp:
+  host: ""
+  port: 22
+  username: ""
+  # Absolute path of the repository directory on the SFTP server. It must
+  # already exist (SFTP will not create parents), and it must be dedicated to
+  # this repository.
+  path: ""
+
+# Credentials. All of them live in one Secret you create yourself — the chart
+# never generates or stores a password.
+#
+#   ssh-keygen -t ed25519 -N '' -f ./kopia_key
+#   ssh-copy-id -i ./kopia_key.pub backup@nas.example.com
+#   ssh-keyscan -p 22 nas.example.com > ./known_hosts
+#
+#   kubectl create secret generic kopia-secret -n backups \
+#     --from-literal=KOPIA_PASSWORD="$(openssl rand -base64 32)" \
+#     --from-file=id_ed25519=./kopia_key \
+#     --from-file=known_hosts=./known_hosts
+#
+# KOPIA_PASSWORD encrypts the repository itself. There is no recovery path if
+# you lose it: the snapshots become unreadable permanently. Store it somewhere
+# that is not backed up by this chart.
+auth:
+  existingSecret: ""
+  keys:
+    # Repository encryption password. Required.
+    password: KOPIA_PASSWORD
+
+    # SSH private key. Recommended over a password: kopia takes the SFTP
+    # password as a command-line flag, where it is visible in the container's
+    # process list.
+    sshPrivateKey: id_ed25519
+
+    # Required alongside sshPrivateKey. Kopia verifies the server host key and
+    # has no flag to skip it, so without this every run fails.
+    #   ssh-keyscan -p <port> <host> > known_hosts
+    knownHosts: known_hosts
+
+    # Only for password auth. Blank it out when using a key.
+    sftpPassword: ""
+
+repository:
+  # Create the repository when connecting fails.
+  #
+  # Off by default, because "connect failed" also describes a typo in
+  # sftp.path — and kopia would then create an empty repository at the wrong
+  # place and upload everything into it. Turn it on for the first run only.
+  createIfMissing: false
+
+# Snapshot identity.
+#
+# Kopia files snapshots under "username@hostname:path". Every Job gets a pod
+# with a random name, so without these overrides each night's snapshot belongs
+# to a different source: retention (which is per source) never prunes anything,
+# and the snapshot list grows one dead source per night.
+#
+# Change these after the first backup and kopia sees an entirely new source —
+# the content is deduplicated, but the history restarts.
+identity:
+  # Defaults to the release fullname.
+  hostname: ""
+  username: "kopia"
+
+# Where the config file and cache live inside the container.
+stateDir: /kopia
+
+cache:
+  # Downloaded content. Barely used by a backup-only client — raise it if you
+  # restore often.
+  contentCacheSizeMB: 1000
+  # Indexes and directory listings. This is the one that decides how fast an
+  # incremental run starts.
+  metadataCacheSizeMB: 2000
+
+# ---------------------------------------------------------------------------
+# What to back up
+# ---------------------------------------------------------------------------
+
+# Each entry becomes a read-only volume mounted at /sources/<name>.
+#
+# In cronjob mode each mount path is also handed to `kopia snapshot create`.
+# In server mode nothing is snapshotted automatically — these are simply the
+# directories the UI can see and offer you. Mount broadly there:
+#
+#   sources:
+#     - name: data
+#       type: hostPath
+#       hostPath: /mnt/data
+#       mountPath: /mnt/data     # same path as on the node, so what you pick
+#                                # in the UI reads the way you expect
+#
+# and every subdirectory under /mnt/data becomes selectable without touching
+# this file again.
+#
+# The chart never CREATES a source volume, only mounts one: a chart-managed
+# claim would start empty, and an empty snapshot recorded as a success is
+# exactly the failure mode that eats a backup history.
+#
+# sources:
+#   - name: photos
+#     type: hostPath          # hostPath | pvc
+#     hostPath: /mnt/data/photos
+#     # Directory: the Job fails if the path is missing. DirectoryOrCreate
+#     # would make an empty directory instead, and kopia would record the empty
+#     # snapshot as a success while retention pruned the good ones.
+#     hostPathType: Directory
+#   - name: video
+#     type: hostPath
+#     hostPath: /mnt/data/video
+#   - name: nextcloud
+#     type: pvc
+#     existingClaim: nextcloud-data
+#     mountPath: /sources/nextcloud   # optional, this is the default
+#     subPath: ""                     # optional
+sources: []
+
+# Where the UI restores files to.
+#
+# Sources are mounted read-only and stay that way — kopia only ever reads them,
+# and a restore must never be able to overwrite the originals. This is the one
+# writable mount in the pod, so anything you restore through the UI lands here
+# and can be picked up from the node.
+#
+# Only mounted into the kopia server pod; the backup CronJob has no use for it.
+#
+# PERMISSIONS: the pod runs as podSecurityContext.runAsUser (1000), and fsGroup
+# does not apply to hostPath. Create the directory on the node with the right
+# owner before enabling this, or every restore fails with "permission denied":
+#
+#   mkdir -p /mnt/data/restore && chown 1000:1000 /mnt/data/restore
+#
+# hostPathType stays Directory on purpose so a missing or unprepared path stops
+# the pod instead of surfacing as a confusing error inside the UI.
+restore:
+  enabled: false
+  # hostPath | pvc
+  type: hostPath
+  hostPath: /mnt/data/restore
+  hostPathType: Directory
+  # For type: pvc. The chart never creates this claim.
+  existingClaim: ""
+  # Path inside the container. This is what you type into the UI's restore
+  # dialog.
+  mountPath: /restore
+
+# Overrides the paths handed to `kopia snapshot create`. Leave empty to
+# snapshot every source's mount path, which is what you normally want. Set it
+# to reach a subdirectory, or something mounted through extraVolumes.
+snapshotPaths: []
+
+snapshot:
+  # Files uploaded concurrently. Over SFTP this is the single biggest lever on
+  # throughput, because the protocol pays a round trip per file. 8 is a safe
+  # start; 16-32 helps on a high-latency link if the server tolerates it.
+  parallel: 8
+
+  # Free-form text attached to each snapshot.
+  description: ""
+
+  # Kopia checkpoints automatically; set this to checkpoint more often so an
+  # interrupted first run loses less. Must be <= 45m.
+  checkpointInterval: ""
+
+  extraArgs: []
+  # - --upload-limit-mb=100000
+
+# ---------------------------------------------------------------------------
+# Policy
+# ---------------------------------------------------------------------------
+
+# Policies are stored in the repository, not here. With apply: true the chart
+# rewrites them on every run, which makes values.yaml the source of truth — and
+# means a policy you edit in the CLI reverts at the next scheduled backup.
+policy:
+  apply: true
+
+  # "none" is right for photos and video: JPEG, HEIC, MP4 and MKV are already
+  # compressed, so anything else here spends CPU to make the data slightly
+  # larger. Use zstd-fastest for documents, source code or database dumps.
+  compression: none
+
+  # Kopia's own defaults keep considerably more than this.
+  retention:
+    keepLatest: 10
+    keepHourly: 0
+    keepDaily: 14
+    keepWeekly: 8
+    keepMonthly: 12
+    keepAnnual: 3
+
+  # Ignore rules, .gitignore syntax. The chart clears the list before applying
+  # these, since --add-ignore appends and would otherwise grow it by one copy
+  # of every rule per run.
+  ignore: []
+  # - ".DS_Store"
+  # - "Thumbs.db"
+  # - "@eaDir/"        # Synology thumbnail cache
+  # - ".stfolder/"     # Syncthing
+
+  # true, false, or the string "inherit". Empty leaves kopia's default, which
+  # is to FAIL the snapshot on an unreadable file — that failure is a feature,
+  # since "true" is how a backup quietly becomes incomplete. Fix the
+  # permissions first; reach for this only when you know what is unreadable
+  # and have decided you do not need it.
+  ignoreFileErrors: ""
+  ignoreDirErrors: ""
+
+  extraArgs: []
+  # - --one-file-system=true
+
+# ---------------------------------------------------------------------------
+# Maintenance and verification
+# ---------------------------------------------------------------------------
+
+# Kopia schedules its own maintenance; this only sets the intervals and marks
+# this client as the owner. Quick maintenance compacts indexes; full
+# maintenance is what actually deletes the blobs freed by retention, so
+# disabling it means the repository grows forever.
+#
+# --owner=me takes ownership from any other client that currently holds it. If
+# several machines share this repository, exactly one should have this enabled.
+maintenance:
+  enabled: true
+  quick: true
+  full: true
+  quickInterval: "1h"
+  fullInterval: "24h"
+
+# Verification. Two different things share this block, and they cost wildly
+# different amounts.
+#
+# STRUCTURAL — what `kopia snapshot verify` does with percent at 0. It walks
+# every snapshot and checks that every content it references actually exists in
+# the repository. Metadata only: it downloads indexes, not your data, so it
+# covers 100% of an 800 GB repository in minutes. This catches the failure that
+# actually happens — blobs missing after bad maintenance, an interrupted
+# upload, or someone tidying up the NAS.
+#
+# CONTENT — what percent > 0 adds. Kopia downloads a random sample of FILES and
+# re-hashes them, which is the only way to catch bit rot. Note "of files", by
+# count, not by bytes: in a mixed photo and video library a random 2% might
+# pull 500 MB one week and 40 GB the next.
+#
+# Sampling is independent each run, so coverage compounds slowly — after N runs
+# at rate p the unverified fraction is (1-p)^N. Weekly 2% leaves roughly a
+# third of the repository untouched after a full year. Treat content sampling
+# as a canary on the SFTP path, not as proof the archive is intact; for that,
+# scrub the filesystem on the NAS itself (ZFS scrub, btrfs / Synology Data
+# Scrubbing), which reads every block locally at disk speed for free.
+verify:
+  # A CronJob of its own, independent of how backups are taken, and the only
+  # workload in this chart whose failure Kubernetes will show you in server
+  # mode — the backup pod there reports Ready whether or not it is still
+  # backing anything up. Point an alert at it.
+  #
+  # The connection is read-only: this Job can neither delete a snapshot nor
+  # take maintenance ownership from whatever is doing the backups.
+  enabled: false
+
+  # Weekly. Verification is download bandwidth, so keep it away from the backup
+  # window.
+  schedule: "23 5 * * 0"
+  # Empty inherits the top-level timeZone.
+  timeZone: ""
+  suspend: false
+
+  # 0 is structural only: full coverage of the repository, minutes, no data
+  # transfer. Anything above adds random file downloads on top — budget roughly
+  # percent x repository size per run, and expect wide variance, since the
+  # sample is by file count.
+  #
+  # 0.5 is a canary, not a guarantee: on 800 GB that is a few gigabytes a week.
+  # Real bit-rot protection belongs on the NAS (ZFS scrub, btrfs / Synology
+  # Data Scrubbing), which checks every block locally for free.
+  percent: 0.5
+
+  # How many errors to collect before giving up.
+  #
+  # Kopia's own default is 0, which its tree walker rewrites to 1 — it stops at
+  # the very first bad file. The run fails either way (any error at all means a
+  # non-zero exit), so this only decides whether you get one line or a list of
+  # what is actually wrong. A list is more useful at 05:23.
+  #
+  # Negative means unlimited, which on a badly damaged repository can take a
+  # very long time.
+  maxErrors: 100
+
+  # Kept purely additive: percent and maxErrors have their own keys above, so
+  # setting this cannot silently drop them.
+  extraArgs: []
+  # - --parallel=16         # default 8; worth raising against a LAN NAS
+
+  # `kopia policy export` into the Job log, between markers.
+  #
+  # Worth having: in server mode the sources, schedules and retention live in
+  # the repository rather than in this file, so this dump is the only copy
+  # outside the NAS. Recover with `kopia policy import`.
+  #
+  #   kubectl logs -n <ns> job/<name> | sed -n '/BEGIN POLICY EXPORT/,/END POLICY EXPORT/p'
+  exportPolicies: true
+  # Also write it here. Needs a writable mount below; leave empty for log-only.
+  exportPath: ""
+
+  # No persistent cache on purpose: verification reads content it has never
+  # read before, so a warm cache buys nothing.
+
+  backoffLimit: 1
+  activeDeadlineSeconds: 21600
+  ttlSecondsAfterFinished: ""
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+
+  # This Job reads the repository, never your data, so it needs no hostPath and
+  # does not inherit the top-level nodeSelector.
+  nodeSelector: {}
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1000m"
+      memory: 1Gi
+
+  extraVolumes: []
+  extraVolumeMounts: []
+
+# ---------------------------------------------------------------------------
+# Web UI (optional)
+# ---------------------------------------------------------------------------
+
+# A second workload: `kopia server --ui` as a Deployment, alongside the backup
+# CronJob. It browses the repository and restores from it; it does NOT take
+# backups — the CronJob keeps doing that.
+#
+# Deliberately not the other way round. kopia server can schedule snapshots
+# itself, but then a failed backup is a line in a long-running pod's log
+# instead of a red Job, and backups can stop for weeks while the pod still
+# reports Ready.
+#
+# Note the UI restores into ITS OWN filesystem. To get files out you either
+# mount somewhere writable through ui.extraVolumes or use `kubectl cp`. For
+# ordinary restores, KopiaUI on your desktop pointed at the same repository is
+# usually easier.
+ui:
+  enabled: false
+
+  # Read-only connection to the repository. The server then cannot delete a
+  # snapshot, cannot edit a policy and cannot take maintenance ownership away
+  # from the backup Job.
+  #
+  # Browsing and restoring both work read-only — restore reads from the
+  # repository and writes to local disk.
+  readOnly: true
+  # Turning readOnly off requires setting this too. It is a speed bump, not a
+  # lock: a writable UI can delete snapshots.
+  acknowledgeWritable: false
+
+  # Blank means the same identity as the backup, which is what makes the UI
+  # open on your own sources rather than an empty list. Safe while readOnly.
+  identity:
+    hostname: ""
+    username: ""
+
+  auth:
+    # Empty by default: the server starts with --without-password and anyone
+    # who can reach it is in.
+    #
+    # Understand what "in" means before leaving it empty behind an Ingress.
+    # Read access is your entire backup archive - every file, every version.
+    # In server mode the UI is writable as well, so it can also delete
+    # snapshots and change what gets backed up. There is no read-only account:
+    # kopia server has exactly one.
+    #
+    # Reasonable on a LAN with no Ingress, or behind an authenticating proxy.
+    # To turn it on, name a key in auth.existingSecret and put it there:
+    #
+    #   passwordKey: KOPIA_UI_PASSWORD
+    #
+    #   kubectl create secret generic kopia-secret -n backups \\
+    #     --from-literal=KOPIA_UI_PASSWORD="$(openssl rand -base64 24)" \\
+    #     --dry-run=client -o yaml | kubectl apply -f -
+    passwordKey: ""
+    username: kopia
+
+  tls:
+    # insecure  plain HTTP inside the cluster; TLS terminates at the Ingress.
+    # existing   mount a cert Secret (tls.crt + tls.key) and serve HTTPS.
+    #
+    # There is no third option: kopia server refuses to listen on a
+    # non-loopback address without a certificate unless --insecure is passed.
+    mode: insecure
+    existingSecret: ""
+
+  # Some reverse proxies break kopia's CSRF token check. Try without it first.
+  disableCSRFChecks: false
+
+  extraArgs: []
+
+  service:
+    type: ClusterIP
+    port: 51515
+    annotations: {}
+    nodePort: ""
+
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: kopia.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+    #  - secretName: kopia-tls
+    #    hosts:
+    #      - kopia.example.com
+
+  # Its own cache, never shared with the backup Job: two kopia processes on one
+  # config file and one cache directory is undefined behaviour, and
+  # ReadWriteOnce does not prevent it — access modes are enforced per node, not
+  # per pod.
+  persistence:
+    cache:
+      enabled: true
+      existingClaim: ""
+      claimName: ""
+      storageClassName: ""
+      accessModes:
+        - ReadWriteOnce
+      size: "5Gi"
+      annotations: {}
+      retain: true
+
+  cache:
+    # Higher than the backup Job's, and for the opposite reason: browsing and
+    # restoring read content back out, which is exactly what the content cache
+    # is for.
+    contentCacheSizeMB: 2000
+    metadataCacheSizeMB: 2000
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: "1000m"
+      memory: 1Gi
+
+  # All TCP, on purpose: the server answers 401 to an unauthenticated GET,
+  # which proves it is alive but would fail an httpGet probe.
+  startupProbe:
+    enabled: true
+    periodSeconds: 5
+    timeoutSeconds: 5
+    # The first start connects over SFTP before it listens, which can be slow.
+    failureThreshold: 60
+  readinessProbe:
+    enabled: true
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  livenessProbe:
+    enabled: true
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 5
+
+  revisionHistoryLimit: 3
+
+  # Standalone, NOT inherited from the top-level nodeSelector — that one exists
+  # to pin the backup pod to the node holding your hostPath data, and the UI
+  # touches no hostPath. Empty means it schedules anywhere. Same for affinity;
+  # tolerations are inherited from the top level, since taints are usually
+  # cluster-wide.
+  nodeSelector: {}
+  affinity: {}
+
+  # A writable target if you intend to restore through the UI.
+  extraVolumes: []
+  # - name: restore
+  #   persistentVolumeClaim:
+  #     claimName: restore-target
+  extraVolumeMounts: []
+  # - name: restore
+  #   mountPath: /restore
+
+# ---------------------------------------------------------------------------
+# Storage for kopia's own state
+# ---------------------------------------------------------------------------
+
+persistence:
+  # Config file plus content and metadata caches. Size this above
+  # cache.contentCacheSizeMB + cache.metadataCacheSizeMB with room to spare.
+  #
+  # Unlike duplicati's /data, nothing here is irreplaceable: the config is
+  # rebuilt by the next connect and a cache is a cache. Losing it costs one
+  # slow run, not a backup.
+  state:
+    # false puts everything in an emptyDir, so the cache is cold on every run.
+    # Workable for a small repository, painful for a large one over SFTP.
+    enabled: true
+
+    # A volume this chart does NOT manage — mounted only, never created and
+    # never deleted. Do not point it at a PVC this chart created earlier:
+    # dropping that claim out of the release manifest makes Helm delete it on
+    # the next upgrade. Use claimName for that.
+    existingClaim: ""
+
+    # Name of the PVC this chart creates and manages.
+    # Default: <fullname>-state.
+    claimName: ""
+
+    storageClassName: ""
+    accessModes:
+      - ReadWriteOnce
+    size: "10Gi"
+    annotations: {}
+    retain: true
+
+# ---------------------------------------------------------------------------
+# Everything else
+# ---------------------------------------------------------------------------
+
+# Extra environment variables as a map. KOPIA_CONFIG_PATH, KOPIA_CACHE_DIRECTORY,
+# KOPIA_LOG_DIR, KOPIA_CHECK_FOR_UPDATES and KOPIA_PASSWORD are set by the chart
+# and should not be overridden here.
+env: {}
+# TZ: "Europe/Kyiv"
+
+# List form, supports valueFrom.
+extraEnv: []
+
+envFrom: []
+
+networkPolicy:
+  enabled: false
+
+  # Ingress is denied outright — nothing in this pod listens on a port. That is
+  # a real deny-all here, not the usual "ports but no from" rule that matches
+  # every source in the cluster.
+
+  # Egress stays completely unrestricted while this list is empty: the chart
+  # does not declare the Egress policyType at all, because declaring it with no
+  # rules would deny everything, DNS and the SFTP server included.
+  #
+  # The moment you add one rule, everything else is denied. A working set needs
+  # the SFTP server plus DNS:
+  #
+  #   egress:
+  #     - to:
+  #         - ipBlock:
+  #             cidr: 192.168.1.10/32
+  #       ports:
+  #         - port: 22
+  #           protocol: TCP
+  egress: []
+
+  # Appends a DNS rule (kube-system :53 UDP+TCP) to the egress list above.
+  # Ignored while egress is empty, since egress is unrestricted anyway. Not
+  # needed if you addressed the SFTP server by IP.
+  allowDNS: true
+
+  # Who may reach the UI, when ui.enabled is on. The backup pod's own policy is
+  # a true deny-all; this one is not, and an empty list here means the usual
+  # trap: a rule with ports and no `from` matches every source in the cluster,
+  # so it would restrict the port number and nothing else.
+  #
+  #   uiIngressFrom:
+  #     - namespaceSelector:
+  #         matchLabels:
+  #           kubernetes.io/metadata.name: ingress-nginx
+  uiIngressFrom: []
+
+# Required when any source is a hostPath: that data does not follow the pod.
+nodeSelector: {}
+# kubernetes.io/hostname: k3s-node-1
+
+tolerations: []
+affinity: {}
+priorityClassName: ""
+
+extraVolumes: []
+extraVolumeMounts: []
+
+# Applied to whichever workload mounts the sources: the CronJob in cronjob
+# mode, the server Deployment in server mode. Not to the UI pod in cronjob
+# mode, which has no source volumes to check.
+#
+# The usual reason to want one — hostPathType: Directory catches a missing
+# path, but NOT a disk that failed to mount after a reboot, since the mount
+# point is then a real, empty directory. Kopia would snapshot nothing, record
+# it as a success, and retention would prune the snapshots that held real data.
+#
+# initContainers:
+#   - name: guard
+#     image: busybox:1.36
+#     securityContext:
+#       allowPrivilegeEscalation: false
+#       readOnlyRootFilesystem: true
+#       capabilities: {drop: [ALL]}
+#     command:
+#       - sh
+#       - -c
+#       - test -f /mnt/data/.mounted || { echo "FATAL: disk not mounted"; exit 1; }
+#     volumeMounts:
+#       - name: src-data        # the chart names source volumes src-<name>
+#         mountPath: /mnt/data
+#         readOnly: true
+initContainers: []
+
+# The `helm test` pod. It connects to the repository read-only using its own
+# emptyDir cache, so it never touches the CronJob's state volume and can run
+# while a backup is in progress.
+tests:
+  enabled: true
+  # Empty means podSecurityContext.runAsUser.
+  runAsUser: ""

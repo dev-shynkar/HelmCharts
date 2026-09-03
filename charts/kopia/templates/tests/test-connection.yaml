@@ -1,0 +1,125 @@
+{{- if .Values.tests.enabled }}
+{{- $uid := .Values.tests.runAsUser | default .Values.podSecurityContext.runAsUser | default 1000 | int }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "kopia.fullname" . }}-test-connection"
+  labels:
+    {{- include "kopia.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  securityContext:
+    {{- if ne $uid 0 }}
+    runAsNonRoot: true
+    {{- end }}
+    runAsUser: {{ $uid }}
+    seccompProfile:
+      type: RuntimeDefault
+  {{- with .Values.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.tolerations }}
+  tolerations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  containers:
+    - name: check-repository
+      image: {{ include "kopia.image" . | quote }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      env:
+        {{- /*
+          Everything in an emptyDir, so this never touches the CronJob's state
+          volume and can run while a backup is in progress.
+        */}}
+        - name: KOPIA_CONFIG_PATH
+          value: /tmp/kopia/repository.config
+        - name: KOPIA_CACHE_DIRECTORY
+          value: /tmp/kopia/cache
+        - name: KOPIA_LOG_DIR
+          value: /tmp/kopia/logs
+        - name: KOPIA_CHECK_FOR_UPDATES
+          value: "false"
+        - name: HOME
+          value: /tmp
+        - name: KOPIA_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.auth.existingSecret }}
+              key: {{ .Values.auth.keys.password }}
+        {{- if .Values.auth.keys.sftpPassword }}
+        - name: CHART_SFTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.auth.existingSecret }}
+              key: {{ .Values.auth.keys.sftpPassword }}
+        {{- end }}
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -eu
+          mkdir -p /tmp/kopia/cache /tmp/kopia/logs
+
+          # --readonly is the point of this test: it proves the host key, the
+          # private key, the path and the repository password all line up,
+          # without any chance of writing to the repository.
+          set -- sftp \
+            --path={{ .Values.sftp.path | quote }} \
+            --host={{ .Values.sftp.host | quote }} \
+            --port={{ .Values.sftp.port | quote }} \
+            --username={{ .Values.sftp.username | quote }} \
+            --readonly \
+            --cache-directory=/tmp/kopia/cache
+          {{- if .Values.auth.keys.sshPrivateKey }}
+          set -- "$@" --keyfile=/kopia-ssh/id_key --known-hosts=/kopia-ssh/known_hosts
+          {{- end }}
+          {{- if .Values.auth.keys.sftpPassword }}
+          set -- "$@" --sftp-password="$CHART_SFTP_PASSWORD"
+          {{- end }}
+
+          echo "connecting read-only to sftp://{{ .Values.sftp.username }}@{{ .Values.sftp.host }}:{{ .Values.sftp.port }}{{ .Values.sftp.path }}"
+          kopia repository connect "$@"
+          kopia repository status
+          kopia snapshot list --all || true
+          kopia repository disconnect
+          echo OK
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        {{- if .Values.auth.keys.sshPrivateKey }}
+        - name: ssh
+          mountPath: /kopia-ssh
+          readOnly: true
+        {{- end }}
+  volumes:
+    - name: tmp
+      emptyDir: {}
+    {{- if .Values.auth.keys.sshPrivateKey }}
+    - name: ssh
+      secret:
+        secretName: {{ .Values.auth.existingSecret | quote }}
+        {{- /* See the note in _helpers.tpl: 0400 would be root-only. */}}
+        defaultMode: 0444
+        items:
+          - key: {{ .Values.auth.keys.sshPrivateKey }}
+            path: id_key
+          {{- if .Values.auth.keys.knownHosts }}
+          - key: {{ .Values.auth.keys.knownHosts }}
+            path: known_hosts
+          {{- end }}
+    {{- end }}
+{{- end }}

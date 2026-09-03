@@ -1,0 +1,170 @@
+{{- if .Values.verify.enabled }}
+{{- $v := .Values.verify }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "kopia.fullname" . }}-verify
+  labels:
+    {{- include "kopia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: verify
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  schedule: {{ $v.schedule | quote }}
+  {{- with ($v.timeZone | default .Values.timeZone) }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  suspend: {{ $v.suspend }}
+  {{- /* Nothing is shared between runs, but two concurrent verifications would
+         just compete for the same uplink. */}}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: {{ $v.startingDeadlineSeconds }}
+  successfulJobsHistoryLimit: {{ $v.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ $v.failedJobsHistoryLimit }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "kopia.labels" . | nindent 8 }}
+        app.kubernetes.io/component: verify
+    spec:
+      backoffLimit: {{ $v.backoffLimit }}
+      {{- with $v.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ . }}
+      {{- end }}
+      {{- with $v.ttlSecondsAfterFinished }}
+      ttlSecondsAfterFinished: {{ . }}
+      {{- end }}
+      template:
+        metadata:
+          labels:
+            {{- include "kopia.componentLabels" (dict "ctx" . "component" "verify") | nindent 12 }}
+            {{- with .Values.commonLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- with .Values.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- $ann := merge (dict) (.Values.podAnnotations | default dict) (.Values.commonAnnotations | default dict) }}
+          {{- with $ann }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "kopia.serviceAccountName" . }}
+          automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+
+          {{- with .Values.priorityClassName }}
+          priorityClassName: {{ . | quote }}
+          {{- end }}
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.podSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          containers:
+            - name: verify
+              image: {{ include "kopia.image" . | quote }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              {{- with .Values.securityContext }}
+              securityContext:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              command:
+                - /bin/sh
+                - /scripts/verify.sh
+              args: []
+              env:
+                {{- /* Config and cache live in the emptyDir: this Job must not
+                       share either with the backup workload. */}}
+                - name: KOPIA_CONFIG_PATH
+                  value: /tmp/kopia-verify/config/repository.config
+                - name: KOPIA_CACHE_DIRECTORY
+                  value: /tmp/kopia-verify/cache
+                - name: KOPIA_LOG_DIR
+                  value: /tmp/kopia-verify/logs
+                - name: KOPIA_CHECK_FOR_UPDATES
+                  value: "false"
+                - name: HOME
+                  value: /tmp
+                - name: KOPIA_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.auth.existingSecret }}
+                      key: {{ .Values.auth.keys.password }}
+                {{- if .Values.auth.keys.sftpPassword }}
+                - name: CHART_SFTP_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.auth.existingSecret }}
+                      key: {{ .Values.auth.keys.sftpPassword }}
+                {{- end }}
+                {{- range $name, $value := (.Values.env | default dict) }}
+                - name: {{ $name }}
+                  value: {{ $value | quote }}
+                {{- end }}
+                {{- with .Values.extraEnv }}
+                {{- toYaml . | nindent 16 }}
+                {{- end }}
+              {{- with .Values.envFrom }}
+              envFrom:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+                {{- if .Values.auth.keys.sshPrivateKey }}
+                - name: ssh
+                  mountPath: /kopia-ssh
+                  readOnly: true
+                {{- end }}
+                {{- with $v.extraVolumeMounts }}
+                {{- toYaml . | nindent 16 }}
+                {{- end }}
+              {{- with $v.resources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+
+          volumes:
+            - name: scripts
+              configMap:
+                name: {{ include "kopia.fullname" . }}-scripts
+                defaultMode: 0555
+            - name: tmp
+              emptyDir: {}
+            {{- if .Values.auth.keys.sshPrivateKey }}
+            - name: ssh
+              secret:
+                secretName: {{ .Values.auth.existingSecret | quote }}
+                defaultMode: 0444
+                items:
+                  - key: {{ .Values.auth.keys.sshPrivateKey }}
+                    path: id_key
+                  {{- if .Values.auth.keys.knownHosts }}
+                  - key: {{ .Values.auth.keys.knownHosts }}
+                    path: known_hosts
+                  {{- end }}
+            {{- end }}
+            {{- with $v.extraVolumes }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+          {{- with $v.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

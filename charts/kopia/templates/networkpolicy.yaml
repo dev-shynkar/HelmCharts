@@ -1,0 +1,68 @@
+{{- /*
+  Covers every workload in this chart that listens on nothing: the backup
+  CronJob and the verify CronJob. The UI has its own policy - it does have to
+  let the Ingress controller in.
+*/}}
+{{- $components := list }}
+{{- if eq .Values.mode "cronjob" }}{{ $components = append $components "backup" }}{{ end }}
+{{- if .Values.verify.enabled }}{{ $components = append $components "verify" }}{{ end }}
+{{- if and $components .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "kopia.fullname" . }}
+  labels:
+    {{- include "kopia.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "kopia.selectorLabels" . | nindent 6 }}
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          {{- toYaml $components | nindent 10 }}
+  policyTypes:
+    - Ingress
+    {{- /*
+      Only declare Egress when rules are given: an empty Egress policyType
+      denies all outbound traffic, which here means no DNS and no SFTP — every
+      backup would fail.
+    */}}
+    {{- if .Values.networkPolicy.egress }}
+    - Egress
+    {{- end }}
+  {{- /*
+    Deny all ingress. Unlike the other charts in this repository, this one is
+    genuinely a deny-all and not a warning in disguise: the backup pod listens
+    on nothing, so an empty ingress list is exactly right.
+
+    It applies only to component=backup. The UI has its own policy, which does
+    have to let the Ingress controller in.
+  */}}
+  ingress: []
+  {{- with .Values.networkPolicy.egress }}
+  egress:
+    {{- toYaml . | nindent 4 }}
+    {{- /*
+      Only appended alongside real egress rules. On its own it would be the
+      single rule under an Egress policyType, and everything else - including
+      the SFTP server - would be denied.
+    */}}
+    {{- if $.Values.networkPolicy.allowDNS }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    {{- end }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,61 @@
+apiVersion: v2
+name: kopia
+description: Kopia backup client - CronJob or writable server with web UI, snapshotting local paths to an SFTP repository
+type: application
+
+version: 0.7.0
+appVersion: "0.23.1"
+
+# 1.25 because the default values set `timeZone`, and CronJob.spec.timeZone is
+# 1.25+ - claiming 1.21 while shipping a default that a 1.21 API server rejects
+# is worse than claiming the truth. Everything else here is 1.21-era; blank
+# timeZone out and the chart itself would run on 1.21.
+kubeVersion: ">=1.25.0-0"
+
+home: https://kopia.io/
+sources:
+  - https://github.com/kopia/kopia
+  - https://hub.docker.com/r/kopia/kopia
+
+keywords:
+  - kopia
+  - backup
+  - snapshot
+  - sftp
+  - deduplication
+  - self-hosted
+
+annotations:
+  artifacthub.io/category: storage
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/changes: |
+    - kind: changed
+      description: The web UI has no password by default - ui.auth.passwordKey is empty and the server starts with --without-password. Set it to a Secret key to turn authentication on. ui.auth.allowNoPassword is gone, and the Ingress-without-password combination is now a loud NOTES warning rather than a render error
+    - kind: changed
+      description: kubeVersion raised to >=1.25.0-0, matching the default timeZone which a 1.21-1.24 API server rejects
+    - kind: added
+      description: Reject commonLabels and podLabels that override a selector label, which left the Deployment unable to match its own pods and creating them endlessly
+    - kind: added
+      description: Reject colliding mount paths (two sources on one path, a source over stateDir or a reserved path, restore over a source) and source names too long for a 63-character volume name - all of which rendered happily and were then refused by the API server
+    - kind: fixed
+      description: Quote every operator-supplied string in a YAML scalar position, so a path containing ": ", " #" or a quote no longer produces an unparseable manifest
+    - kind: added
+      description: Reject $, backtick and backslash in values that are embedded in the generated shell scripts - the shell would expand them and kopia would receive a different path than you set
+    - kind: fixed
+      description: initContainers are applied to the server Deployment too, so the documented unmounted-disk guard works in server mode - previously it only reached the backup CronJob
+    - kind: fixed
+      description: The server Deployment had no terminationGracePeriodSeconds, so a node drain or helm upgrade gave kopia 30 seconds to flush a checkpoint of an upload that may have been running for hours
+    - kind: changed
+      description: One verification mechanism instead of two - verify.cronjob.* moves up to verify.*, and the inline per-run verification is gone. verify.enabled now renders the CronJob in both modes
+    - kind: added
+      description: verify.cronjob - a read-only verification CronJob that reads data back out of the repository and exports the repository-side policies; works in both modes and is the only workload that fails visibly in server mode
+    - kind: added
+      description: mode=server runs one writable kopia server instead of the CronJob, so sources, schedules and policies are managed in the browser
+    - kind: added
+      description: restore.* mounts a writable restore target into the server pod; sources stay read-only so a restore cannot overwrite the originals
+    - kind: added
+      description: Optional web UI - kopia server --ui as a Deployment with Service and Ingress, read-only by default, alongside the backup CronJob
+    - kind: added
+      description: Backup and UI pods carry app.kubernetes.io/component, so the deny-all NetworkPolicy on the backup pod no longer covers the UI
+    - kind: added
+      description: Initial release - CronJob running kopia snapshot create against an SFTP repository
