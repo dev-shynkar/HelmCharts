@@ -35,9 +35,9 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 2.3.0.4
-    created: "2026-09-03T10:35:29.690552923Z"
+    created: "2026-09-03T11:06:50.759887777Z"
     description: Duplicati backup client - official duplicati/duplicati image
-    digest: c2ce82a0674ce63b96c664b0caa71179703498989343ed69745ef4db60f6cebd
+    digest: 39480bd374ad411a9135d2da29c3f9fc13f4a6b2c13cf3b4116460f56f875625
     home: https://duplicati.com/
     icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
     keywords:
@@ -81,9 +81,9 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 1.6.0
-    created: "2026-09-03T10:35:29.691535113Z"
+    created: "2026-09-03T11:06:50.760821717Z"
     description: Prometheus exporter for EcoFlow devices (remote mode)
-    digest: 18e68e7b429349fb402a5c0727568c79ac1f0efb0392910f17672799f5fc7bcd
+    digest: b61385c3dfda7d41a7903fe342d0f094e8dc0ebc5aceb29bc192482787c169c9
     home: https://github.com/tess1o/go-ecoflow-exporter
     icon: https://raw.githubusercontent.com/tess1o/go-ecoflow-exporter/main/docs/images/dashboard.png
     keywords:
@@ -106,6 +106,8 @@ entries:
   - annotations:
       artifacthub.io/category: storage
       artifacthub.io/changes: |
+        - kind: fixed
+          description: Pods now set spec.hostname and a USER env var, so kopia's machine identity is stable across restarts. Without it, repository.configureInUI filed every restart's snapshots under a new source - the pod name - and retention, which is per source, would never have pruned anything
         - kind: removed
           description: ui.tls is gone - the server always speaks plain HTTP inside the cluster and TLS terminates at the Ingress (ui.ingress.tls, unchanged). Removes the cert Secret mount, the backend-protocol annotation and two validations; a UI password is now the only way to avoid the allow-extremely-dangerous flag
         - kind: fixed
@@ -147,10 +149,10 @@ entries:
       artifacthub.io/license: Apache-2.0
     apiVersion: v2
     appVersion: 0.23.1
-    created: "2026-09-03T10:35:29.693798105Z"
+    created: "2026-09-03T11:06:50.763036181Z"
     description: Kopia backup client - CronJob or writable server with web UI, snapshotting
       local paths to an SFTP repository
-    digest: 1f5c4aa33c00408c01cf3cab0b41ae0f1f4301902fd756e1c35a03b6f8dcdb6c
+    digest: 7a6d923aba2b5d35a014c48512636822786a7a25c563c162e48c2c2338b424d7
     home: https://kopia.io/
     keywords:
     - kopia
@@ -166,8 +168,8 @@ entries:
     - https://hub.docker.com/r/kopia/kopia
     type: application
     urls:
-    - https://dev-shynkar.github.io/HelmCharts/kopia-0.10.0.tgz
-    version: 0.10.0
+    - https://dev-shynkar.github.io/HelmCharts/kopia-0.11.0.tgz
+    version: 0.11.0
   pingvin-share-x:
   - annotations:
       artifacthub.io/category: storage
@@ -190,9 +192,9 @@ entries:
       artifacthub.io/license: BSD-2-Clause
     apiVersion: v2
     appVersion: 1.21.2
-    created: "2026-09-03T10:35:29.694736231Z"
+    created: "2026-09-03T11:06:50.763998514Z"
     description: Helm chart for Pingvin Share X — a self-hosted file sharing platform
-    digest: ebdae5794710c192e6f304aa73a832cd5676f7ac70df023e5be1244055eda734
+    digest: 08659bc93ce90e0f04f3739a72c19395202265e8d82521b956f761bf15b48969
     home: https://github.com/smp46/pingvin-share-x
     icon: https://raw.githubusercontent.com/smp46/pingvin-share-x/main/frontend/public/img/logo.png
     keywords:
@@ -211,9 +213,9 @@ entries:
   samba:
   - apiVersion: v2
     appVersion: 4.21.4
-    created: "2026-09-03T10:35:29.695178023Z"
+    created: "2026-09-03T11:06:50.76440438Z"
     description: Helm chart for Samba SMB server using crazymax/samba
-    digest: 9d2edb80ef594ede6f13209065040dea654f4e2b21fd98ec4651136bb2712aa4
+    digest: 3dec0a82cd7440f6157ed299df58980e488a26d99096e76be547901645bac73a
     name: samba
     type: application
     urls:
@@ -254,9 +256,9 @@ entries:
       artifacthub.io/license: GPL-2.0-or-later
     apiVersion: v2
     appVersion: 4.1.3
-    created: "2026-09-03T10:35:29.696358307Z"
+    created: "2026-09-03T11:06:50.765597141Z"
     description: Transmission torrent client - linuxserver.io image
-    digest: 2f75876667c246e2d0e5eaba2458e375ed71bc0deb274b0f2c077f6205c11585
+    digest: 25ca76a37d11028c93e54feb7a8c2392ea357e22b9b041cacaa961614ebd7cdd
     home: https://github.com/linuxserver/docker-transmission
     icon: https://raw.githubusercontent.com/linuxserver/docker-templates/master/linuxserver.io/img/transmission-icon.png
     keywords:
@@ -274,4 +276,4 @@ entries:
     urls:
     - https://dev-shynkar.github.io/HelmCharts/transmission-0.6.0.tgz
     version: 0.6.0
-generated: "2026-09-03T10:35:29.689044144Z"
+generated: "2026-09-03T11:06:50.756933115Z"
