@@ -35,9 +35,9 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 2.3.0.4
-    created: "2026-09-03T09:38:57.431057153Z"
+    created: "2026-09-03T10:35:29.690552923Z"
     description: Duplicati backup client - official duplicati/duplicati image
-    digest: 221f9c7f67a30c38bd760c43566f729c8c500edf4f069b5e2c0d8c3bceed54bd
+    digest: c2ce82a0674ce63b96c664b0caa71179703498989343ed69745ef4db60f6cebd
     home: https://duplicati.com/
     icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
     keywords:
@@ -81,9 +81,9 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 1.6.0
-    created: "2026-09-03T09:38:57.431949882Z"
+    created: "2026-09-03T10:35:29.691535113Z"
     description: Prometheus exporter for EcoFlow devices (remote mode)
-    digest: 549e2d8d0a57a914d7d0175416e6263d6de347414e6fbb73d4b94c1856a1124f
+    digest: 18e68e7b429349fb402a5c0727568c79ac1f0efb0392910f17672799f5fc7bcd
     home: https://github.com/tess1o/go-ecoflow-exporter
     icon: https://raw.githubusercontent.com/tess1o/go-ecoflow-exporter/main/docs/images/dashboard.png
     keywords:
@@ -106,6 +106,10 @@ entries:
   - annotations:
       artifacthub.io/category: storage
       artifacthub.io/changes: |
+        - kind: removed
+          description: ui.tls is gone - the server always speaks plain HTTP inside the cluster and TLS terminates at the Ingress (ui.ingress.tls, unchanged). Removes the cert Secret mount, the backend-protocol annotation and two validations; a UI password is now the only way to avoid the allow-extremely-dangerous flag
+        - kind: fixed
+          description: A password-less UI could not start at all - kopia refuses --without-password on a non-loopback bind. The chart now passes --allow-extremely-dangerous-unauthenticated-server-on-the-network, and says plainly what that opens
         - kind: added
           description: repository.configureInUI starts the server with no repository so the backend, credentials and everything else are set up in the browser - kopia server opens its repository as optional, so the UI is served either way. sftp.* and auth.existingSecret become optional; the connection is persisted to the state volume so it survives restarts
         - kind: changed
@@ -143,10 +147,10 @@ entries:
       artifacthub.io/license: Apache-2.0
     apiVersion: v2
     appVersion: 0.23.1
-    created: "2026-09-03T09:38:57.434113174Z"
+    created: "2026-09-03T10:35:29.693798105Z"
     description: Kopia backup client - CronJob or writable server with web UI, snapshotting
       local paths to an SFTP repository
-    digest: 309d7a57cc8dfe67c83759fa5d8fb8369944c326badb0a2c09a3211ae71c7751
+    digest: 1f5c4aa33c00408c01cf3cab0b41ae0f1f4301902fd756e1c35a03b6f8dcdb6c
     home: https://kopia.io/
     keywords:
     - kopia
@@ -162,8 +166,8 @@ entries:
     - https://hub.docker.com/r/kopia/kopia
     type: application
     urls:
-    - https://dev-shynkar.github.io/HelmCharts/kopia-0.9.0.tgz
-    version: 0.9.0
+    - https://dev-shynkar.github.io/HelmCharts/kopia-0.10.0.tgz
+    version: 0.10.0
   pingvin-share-x:
   - annotations:
       artifacthub.io/category: storage
@@ -186,9 +190,9 @@ entries:
       artifacthub.io/license: BSD-2-Clause
     apiVersion: v2
     appVersion: 1.21.2
-    created: "2026-09-03T09:38:57.435020045Z"
+    created: "2026-09-03T10:35:29.694736231Z"
     description: Helm chart for Pingvin Share X — a self-hosted file sharing platform
-    digest: b69341b79d862b01580fa62ade70596d3ad0c9e75fef571af1012aaa60122359
+    digest: ebdae5794710c192e6f304aa73a832cd5676f7ac70df023e5be1244055eda734
     home: https://github.com/smp46/pingvin-share-x
     icon: https://raw.githubusercontent.com/smp46/pingvin-share-x/main/frontend/public/img/logo.png
     keywords:
@@ -207,9 +211,9 @@ entries:
   samba:
   - apiVersion: v2
     appVersion: 4.21.4
-    created: "2026-09-03T09:38:57.435411741Z"
+    created: "2026-09-03T10:35:29.695178023Z"
     description: Helm chart for Samba SMB server using crazymax/samba
-    digest: 4f1a0b3afce9b831982768d9f31fe3889397dca224d5fbb3cfa2e354b427f332
+    digest: 9d2edb80ef594ede6f13209065040dea654f4e2b21fd98ec4651136bb2712aa4
     name: samba
     type: application
     urls:
@@ -250,9 +254,9 @@ entries:
       artifacthub.io/license: GPL-2.0-or-later
     apiVersion: v2
     appVersion: 4.1.3
-    created: "2026-09-03T09:38:57.436554029Z"
+    created: "2026-09-03T10:35:29.696358307Z"
     description: Transmission torrent client - linuxserver.io image
-    digest: 3af83fe189b2910fc094e3670701e4dee421417024c04033db1d111ff293d2f3
+    digest: 2f75876667c246e2d0e5eaba2458e375ed71bc0deb274b0f2c077f6205c11585
     home: https://github.com/linuxserver/docker-transmission
     icon: https://raw.githubusercontent.com/linuxserver/docker-templates/master/linuxserver.io/img/transmission-icon.png
     keywords:
@@ -270,4 +274,4 @@ entries:
     urls:
     - https://dev-shynkar.github.io/HelmCharts/transmission-0.6.0.tgz
     version: 0.6.0
-generated: "2026-09-03T09:38:57.428882113Z"
+generated: "2026-09-03T10:35:29.689044144Z"
