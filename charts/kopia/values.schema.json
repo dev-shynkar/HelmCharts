@@ -222,6 +222,10 @@
         "createIfMissing": {
           "type": "boolean",
           "description": "Also fires on a typo in sftp.path, creating an empty repository at the wrong place. Turn on for the first run only."
+        },
+        "configureInUI": {
+          "type": "boolean",
+          "description": "Server mode only. Start with no repository and configure the backend in the browser; sftp.* and auth.existingSecret become optional."
         }
       }
     },

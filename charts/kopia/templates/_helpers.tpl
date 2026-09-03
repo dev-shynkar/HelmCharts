@@ -196,6 +196,13 @@ gets its own of each.
 {{/*
 UI names and identity.
 */}}
+{{/*
+The SSH key is only mountable when a Secret was given at all.
+*/}}
+{{- define "kopia.sshEnabled" -}}
+{{- if and .Values.auth.existingSecret .Values.auth.keys.sshPrivateKey -}}true{{- end -}}
+{{- end }}
+
 {{- define "kopia.uiFullname" -}}
 {{- printf "%s-ui" (include "kopia.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end }}
@@ -310,7 +317,7 @@ sources  one per entry in .Values.sources, always read-only
   {{- end }}
 - name: tmp
   emptyDir: {}
-{{- if .Values.auth.keys.sshPrivateKey }}
+{{- if include "kopia.sshEnabled" . }}
 - name: ssh
   secret:
     secretName: {{ .Values.auth.existingSecret | quote }}
@@ -360,7 +367,7 @@ sources  one per entry in .Values.sources, always read-only
   mountPath: {{ .Values.stateDir | quote }}
 - name: tmp
   mountPath: /tmp
-{{- if .Values.auth.keys.sshPrivateKey }}
+{{- if include "kopia.sshEnabled" . }}
 - name: ssh
   mountPath: /kopia-ssh
   readOnly: true
@@ -436,21 +443,30 @@ Job at 03:00, or — worse — as a Job that succeeds while backing up nothing.
 */}}
 {{- define "kopia.validate" -}}
 
+{{- if .Values.repository.configureInUI }}
+{{- if ne .Values.mode "server" }}
+{{- fail "repository.configureInUI needs mode=server: there is no browser to configure anything in when a CronJob does the work." }}
+{{- end }}
+{{- if .Values.verify.enabled }}
+{{- fail "verify.enabled cannot work with repository.configureInUI: the verification Job connects from values, and there is nothing in values to connect with. Turn it on once the repository is configured." }}
+{{- end }}
+{{- else }}
 {{- if not .Values.auth.existingSecret }}
-{{- fail "auth.existingSecret is required: kopia cannot open a repository without its password. Create the Secret first — see NOTES/README." }}
+{{- fail "auth.existingSecret is required: kopia cannot open a repository without its password. Create the Secret first, or set repository.configureInUI=true to do the whole setup in the browser." }}
 {{- end }}
 {{- if not .Values.auth.keys.password }}
 {{- fail "auth.keys.password is required: it names the key inside auth.existingSecret that holds the repository password." }}
 {{- end }}
 
 {{- if not .Values.sftp.host }}
-{{- fail "sftp.host is required" }}
+{{- fail "sftp.host is required (or set repository.configureInUI=true)" }}
 {{- end }}
 {{- if not .Values.sftp.username }}
-{{- fail "sftp.username is required" }}
+{{- fail "sftp.username is required (or set repository.configureInUI=true)" }}
 {{- end }}
 {{- if not .Values.sftp.path }}
-{{- fail "sftp.path is required: the absolute path of the repository directory on the SFTP server" }}
+{{- fail "sftp.path is required: the absolute path of the repository directory on the SFTP server (or set repository.configureInUI=true)" }}
+{{- end }}
 {{- end }}
 
 {{- /*
@@ -460,7 +476,7 @@ Job at 03:00, or — worse — as a Job that succeeds while backing up nothing.
 {{- if and .Values.auth.keys.sshPrivateKey (not .Values.auth.keys.knownHosts) }}
 {{- fail "auth.keys.knownHosts is required alongside auth.keys.sshPrivateKey: kopia verifies the SFTP host key and cannot be told to skip it. Generate it with: ssh-keyscan -p <port> <host>" }}
 {{- end }}
-{{- if and (not .Values.auth.keys.sshPrivateKey) (not .Values.auth.keys.sftpPassword) }}
+{{- if and (not .Values.repository.configureInUI) (not .Values.auth.keys.sshPrivateKey) (not .Values.auth.keys.sftpPassword) }}
 {{- fail "no SFTP credentials: set auth.keys.sshPrivateKey (recommended) or auth.keys.sftpPassword to a key in auth.existingSecret" }}
 {{- end }}
 
@@ -468,12 +484,17 @@ Job at 03:00, or — worse — as a Job that succeeds while backing up nothing.
   A backup of nothing is the failure this chart exists to prevent, so refuse to
   render rather than schedule a Job that snapshots an empty list.
 */}}
-{{- if and (not .Values.sources) (not .Values.snapshotPaths) }}
-{{- if eq .Values.mode "server" }}
-{{- fail "sources is empty, so the server pod would see none of your data and the UI directory browser would show only the container filesystem. Mount at least the disk holding what you back up." }}
-{{- else }}
+{{- /*
+  In cronjob mode this is fatal: the Job would run `kopia snapshot create` with
+  no paths and fail every night.
+
+  In server mode it is legitimate - a server with no sources mounted is a
+  browse-and-restore console for a repository something else fills. It cannot
+  back anything up, so NOTES says so loudly rather than the chart refusing to
+  render.
+*/}}
+{{- if and (not .Values.sources) (not .Values.snapshotPaths) (ne .Values.mode "server") }}
 {{- fail "nothing to back up: set at least one entry under sources (or snapshotPaths, if the data arrives through extraVolumes)" }}
-{{- end }}
 {{- end }}
 
 {{- $seen := dict }}

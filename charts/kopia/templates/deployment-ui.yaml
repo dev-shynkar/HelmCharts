@@ -105,11 +105,23 @@ spec:
               value: "false"
             - name: HOME
               value: "/tmp"
+            {{- if .Values.repository.configureInUI }}
+            {{- /*
+              The image sets this to false, which would throw away whatever you
+              connect in the browser the moment the pod restarts. With no
+              repository in values, the state volume is the only place the
+              connection can live.
+            */}}
+            - name: KOPIA_PERSIST_CREDENTIALS_ON_CONNECT
+              value: "true"
+            {{- end }}
+            {{- if .Values.auth.existingSecret }}
             - name: KOPIA_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.auth.existingSecret }}
+                  name: {{ .Values.auth.existingSecret | quote }}
                   key: {{ .Values.auth.keys.password }}
+            {{- end }}
             {{- if .Values.ui.auth.passwordKey }}
             - name: KOPIA_UI_PASSWORD
               valueFrom:
@@ -145,7 +157,7 @@ spec:
               mountPath: {{ .Values.stateDir | quote }}
             - name: tmp
               mountPath: /tmp
-            {{- if .Values.auth.keys.sshPrivateKey }}
+            {{- if include "kopia.sshEnabled" . }}
             - name: ssh
               mountPath: /kopia-ssh
               readOnly: true
@@ -226,7 +238,7 @@ spec:
           {{- end }}
         - name: tmp
           emptyDir: {}
-        {{- if .Values.auth.keys.sshPrivateKey }}
+        {{- if include "kopia.sshEnabled" . }}
         - name: ssh
           secret:
             secretName: {{ .Values.auth.existingSecret | quote }}

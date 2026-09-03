@@ -3,7 +3,7 @@ name: kopia
 description: Kopia backup client - CronJob or writable server with web UI, snapshotting local paths to an SFTP repository
 type: application
 
-version: 0.7.0
+version: 0.9.0
 appVersion: "0.23.1"
 
 # 1.25 because the default values set `timeZone`, and CronJob.spec.timeZone is
@@ -29,6 +29,10 @@ annotations:
   artifacthub.io/category: storage
   artifacthub.io/license: Apache-2.0
   artifacthub.io/changes: |
+    - kind: added
+      description: repository.configureInUI starts the server with no repository so the backend, credentials and everything else are set up in the browser - kopia server opens its repository as optional, so the UI is served either way. sftp.* and auth.existingSecret become optional; the connection is persisted to the state volume so it survives restarts
+    - kind: changed
+      description: sources may be empty in server mode - that is a browse-and-restore console for a repository filled elsewhere. It backs nothing up, so NOTES warns loudly instead of the chart refusing to render. Still required in cronjob mode
     - kind: changed
       description: The web UI has no password by default - ui.auth.passwordKey is empty and the server starts with --without-password. Set it to a Secret key to turn authentication on. ui.auth.allowNoPassword is gone, and the Ingress-without-password combination is now a loud NOTES warning rather than a render error
     - kind: changed

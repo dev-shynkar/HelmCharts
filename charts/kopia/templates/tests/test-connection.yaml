@@ -1,4 +1,5 @@
-{{- if .Values.tests.enabled }}
+{{- /* Nothing to connect to when the repository is configured in the browser. */}}
+{{- if and .Values.tests.enabled (not .Values.repository.configureInUI) }}
 {{- $uid := .Values.tests.runAsUser | default .Values.podSecurityContext.runAsUser | default 1000 | int }}
 apiVersion: v1
 kind: Pod

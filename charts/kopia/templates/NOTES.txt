@@ -5,13 +5,13 @@
 Kopia {{ .Chart.AppVersion }} deployed as "{{ .Release.Name }}" in {{ .Values.mode }} mode.
 
   schedule    {{ if $srvMode }}per source, in the UI (Snapshot Frequency){{ else }}{{ .Values.schedule }}{{ with .Values.timeZone }} ({{ . }}){{ end }}{{ if .Values.suspend }}  [SUSPENDED]{{ end }}{{ end }}
-  repository  sftp://{{ .Values.sftp.username }}@{{ .Values.sftp.host }}:{{ .Values.sftp.port }}{{ .Values.sftp.path }}
-  identity    {{ include "kopia.serverIdentityUsername" . }}@{{ include "kopia.serverIdentityHostname" . }}
-  {{ if $srvMode }}mounted     {{ range $i, $src := .Values.sources }}{{ if $i }}, {{ end }}{{ include "kopia.sourceMountPath" (dict "src" $src) }}{{ end }}{{ else }}paths       {{ join ", " $paths }}{{ end }}
+  repository  {{ if .Values.repository.configureInUI }}configured in the browser{{ else }}sftp://{{ .Values.sftp.username }}@{{ .Values.sftp.host }}:{{ .Values.sftp.port }}{{ .Values.sftp.path }}{{ end }}
+  identity    {{ if .Values.repository.configureInUI }}whatever you set when connecting{{ else }}{{ include "kopia.serverIdentityUsername" . }}@{{ include "kopia.serverIdentityHostname" . }}{{ end }}
+  {{ if $srvMode }}mounted     {{ if .Values.sources }}{{ range $i, $src := .Values.sources }}{{ if $i }}, {{ end }}{{ include "kopia.sourceMountPath" (dict "src" $src) }}{{ end }}{{ else }}nothing - browse and restore only{{ end }}{{ else }}paths       {{ join ", " $paths }}{{ end }}
 
 {{- if $srvMode }}
 
-{{ $n = add1 $n }}{{ $n }}. Nothing is scheduled yet. Open the UI and add your first source:
+{{ $n = add1 $n }}{{ $n }}. {{ if .Values.repository.configureInUI }}No repository yet. Open the UI and connect one:{{ else }}Nothing is scheduled yet. Open the UI and add your first source:{{ end }}
 {{- if .Values.ui.ingress.enabled }}
 {{- range $host := .Values.ui.ingress.hosts }}
 
@@ -23,6 +23,31 @@ Kopia {{ .Chart.AppVersion }} deployed as "{{ .Release.Name }}" in {{ .Values.mo
      # then http{{ if eq .Values.ui.tls.mode "existing" }}s{{ end }}://localhost:51515
 {{- end }}
 
+{{- if .Values.repository.configureInUI }}
+
+   Repository tab -> SFTP. You will need the host, username, path and a
+   password for the repository itself.
+{{- if include "kopia.sshEnabled" . }}
+   Your SSH key is mounted at /kopia-ssh/id_key and known_hosts at
+   /kopia-ssh/known_hosts - use those paths in the form.
+{{- else }}
+   No SSH key is mounted. Either use password authentication, or set
+   auth.existingSecret with auth.keys.sshPrivateKey and the key appears at
+   /kopia-ssh/id_key.
+{{- end }}
+
+   What you connect is written to the state volume and survives restarts.
+   Two things follow from configuring here rather than in values:
+
+     * nothing about this repository is in Git. `helm install` on an empty
+       cluster gives you a blank server again. Turn on verify.enabled once you
+       are connected — its policy export is then your only copy.
+     * the repository password ends up on the state PVC, the same way KopiaUI
+       stores it on a desktop.
+
+   `helm test` is skipped in this mode: there is nothing yet to test.
+{{- end }}
+{{- if .Values.sources }}
    Snapshots tab -> New Snapshot -> browse to a directory under:
 {{- range $src := .Values.sources }}
 
@@ -32,6 +57,21 @@ Kopia {{ .Chart.AppVersion }} deployed as "{{ .Release.Name }}" in {{ .Values.mo
    Pick a Snapshot Frequency in the policy and kopia's own scheduler takes it
    from there. Only paths under the mounts above exist inside this pod; adding
    anything else means editing `sources` in values.yaml and restarting.
+{{- else }}
+
+   WARNING: `sources` is empty, so nothing of yours is mounted into this pod.
+   You can browse and restore, but this release CANNOT BACK ANYTHING UP - the
+   only paths it can see are the container's own. Mount the disk:
+
+     sources:
+       - name: data
+         type: hostPath
+         hostPath: /mnt/data
+         mountPath: /mnt/data
+
+     nodeSelector:
+       kubernetes.io/hostname: <the node holding it>
+{{- end }}
 {{- else }}
 
 {{ $n = add1 $n }}{{ $n }}. Run it now instead of waiting for the schedule:

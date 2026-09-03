@@ -191,6 +191,8 @@ sftp:
 # you lose it: the snapshots become unreadable permanently. Store it somewhere
 # that is not backed up by this chart.
 auth:
+  # Required unless repository.configureInUI is on, in which case it is
+  # optional and only used to mount the SSH key.
   existingSecret: ""
   keys:
     # Repository encryption password. Required.
@@ -210,6 +212,28 @@ auth:
     sftpPassword: ""
 
 repository:
+  # Start the server with no repository at all and do the whole setup in the
+  # browser: pick the backend, enter the SFTP details, set the encryption
+  # password. kopia server supports this - it opens its repository as optional
+  # and serves the UI either way.
+  #
+  # Server mode only. With it on, sftp.* and auth.existingSecret become
+  # optional and the chart makes no connection of its own.
+  #
+  # Two consequences worth knowing:
+  #
+  #   * The repository password you type in the UI is persisted to the state
+  #     volume (KOPIA_PERSIST_CREDENTIALS_ON_CONNECT), because otherwise the
+  #     connection would be gone on the next pod restart. It is stored the same
+  #     way KopiaUI stores it on a desktop.
+  #   * Nothing about the repository is in this file any more, so `helm install`
+  #     on an empty cluster brings back a blank server. Keep verify.enabled on
+  #     once you are set up - its policy export is then your only copy.
+  #
+  # Set auth.existingSecret anyway if you want the SSH key mounted: it lands at
+  # /kopia-ssh/id_key and you can point the UI's SFTP form at that path.
+  configureInUI: false
+
   # Create the repository when connecting fails.
   #
   # Off by default, because "connect failed" also describes a typo in
@@ -261,6 +285,10 @@ cache:
 #
 # and every subdirectory under /mnt/data becomes selectable without touching
 # this file again.
+#
+# Required in cronjob mode. In server mode it may be left empty, which gives a
+# browse-and-restore console for a repository something else fills - useful,
+# but it backs nothing up, and NOTES will say so on every upgrade.
 #
 # The chart never CREATES a source volume, only mounts one: a chart-managed
 # claim would start empty, and an empty snapshot recorded as a success is

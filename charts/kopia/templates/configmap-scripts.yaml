@@ -194,21 +194,36 @@ data:
     #!/bin/sh
     # Rendered by the kopia chart {{ .Chart.Version }}, mode={{ .Values.mode }}.
     #
+{{- if .Values.repository.configureInUI }}
+    # Starts `kopia server` with no repository. The server opens its repository
+    # as optional, so it serves the UI regardless and the browser gets the
+    # setup screen.
+{{- else }}
     # Connects the repository, then hands the process over to
     # `kopia server start`. Two steps rather than one because the server reads
     # an already-connected config file; it does not take repository flags.
+{{- end }}
     set -eu
 
     say() { printf '%s  %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*"; }
     die() { say "ERROR: $*" >&2; exit 1; }
 
     STATE_DIR={{ .Values.stateDir | quote }}
+    mkdir -p "$STATE_DIR/config" "$STATE_DIR/cache" "$KOPIA_LOG_DIR"
+
+{{- if .Values.repository.configureInUI }}
+    # repository.configureInUI: the chart makes no connection at all.
+    #
+    # `kopia server start` opens its repository as optional - the CLI passes
+    # required=false only here - so it serves the UI whether or not one is
+    # connected, and the browser gets the setup screen. Whatever you connect
+    # there is persisted to the state volume, so it survives a restart.
+    say "no repository configured by the chart - the UI will ask for one"
+{{- else }}
     FINGERPRINT={{ include "kopia.uiConnectionFingerprint" . | quote }}
     FINGERPRINT_FILE="$STATE_DIR/connection.fingerprint"
     IDENT_HOST={{ include "kopia.serverIdentityHostname" . | quote }}
     IDENT_USER={{ include "kopia.serverIdentityUsername" . | quote }}
-
-    mkdir -p "$STATE_DIR/config" "$STATE_DIR/cache" "$KOPIA_LOG_DIR"
 
     [ -n "${KOPIA_PASSWORD:-}" ] || die "KOPIA_PASSWORD is empty. Key {{ .Values.auth.keys.password }} in Secret {{ .Values.auth.existingSecret }} is missing or blank."
 
@@ -278,6 +293,8 @@ data:
       --quick-interval={{ .Values.maintenance.quickInterval }} \
       --full-interval={{ .Values.maintenance.fullInterval }}
     {{- end }}
+
+{{- end }}
 
     # 51515 is the container port and is deliberately not templated: a
     # NetworkPolicy matches the port the pod listens on, so tying it to

@@ -99,6 +99,43 @@ helm install kopia ./kopia -n backups --create-namespace -f my-values.yaml
 helm test kopia -n backups          # read-only connection check
 ```
 
+## Configuring everything in the browser
+
+If you would rather not put the repository into values at all:
+
+```yaml
+mode: server
+repository:
+  configureInUI: true
+ui:
+  acknowledgeWritable: true
+```
+
+Three keys, and that is the whole file. `sftp.*`, `auth.existingSecret` and
+`sources` all become optional; the pod starts with no repository and the UI
+opens on its setup screen.
+
+This works because `kopia server start` opens its repository as *optional* —
+in kopia's CLI every other command passes `required=true`, and `server start`
+passes `false`. So the server runs and serves the UI whether or not anything is
+connected.
+
+Three things to know before choosing it:
+
+* **Nothing about the repository is in Git.** `helm install` on an empty
+  cluster gives you a blank server again. Turn on `verify.enabled` once you are
+  connected — its policy export is then your only copy of the configuration.
+* **The repository password ends up on the state PVC.** The chart sets
+  `KOPIA_PERSIST_CREDENTIALS_ON_CONNECT=true`, because the image sets it to
+  `false` and the connection would otherwise be gone at the next restart. It is
+  stored the same way KopiaUI stores it on a desktop.
+* **`helm test` is skipped** — there is nothing to test until you connect.
+
+You can still set `auth.existingSecret` to get the SSH key mounted at
+`/kopia-ssh/id_key`, and point the UI's SFTP form at that path. And you still
+need `sources` before anything can actually be backed up — a server with none
+mounted can only browse and restore.
+
 ## Creating the repository
 
 The chart refuses to create one by default, because "connect failed" also
