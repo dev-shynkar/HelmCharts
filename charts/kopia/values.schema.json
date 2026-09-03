@@ -666,23 +666,6 @@
             }
           }
         },
-        "tls": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "mode": {
-              "type": "string",
-              "enum": [
-                "insecure",
-                "existing"
-              ],
-              "description": "insecure = HTTP inside the cluster, TLS at the Ingress. existing = serve HTTPS from a mounted cert Secret."
-            },
-            "existingSecret": {
-              "type": "string"
-            }
-          }
-        },
         "disableCSRFChecks": {
           "type": "boolean"
         },

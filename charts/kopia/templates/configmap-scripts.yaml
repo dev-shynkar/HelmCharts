@@ -303,13 +303,10 @@ data:
     {{- if $readOnly }}
     set -- "$@" --readonly
     {{- end }}
-    {{- if eq .Values.ui.tls.mode "existing" }}
-    set -- "$@" --tls-cert-file=/kopia-tls/tls.crt --tls-key-file=/kopia-tls/tls.key
-    {{- else }}
-    # kopia server refuses a non-loopback address without a certificate.
-    # --insecure is correct here only because TLS terminates at the Ingress.
+    # kopia server refuses a non-loopback address without a certificate, so
+    # --insecure is not optional here. It is correct because nothing terminates
+    # TLS in this pod: that is the Ingress's job.
     set -- "$@" --insecure
-    {{- end }}
     {{- if .Values.ui.auth.passwordKey }}
     # The password reaches kopia as a flag, so it is visible in this
     # container's own process list. There is one process here and nothing else
@@ -317,6 +314,13 @@ data:
     set -- "$@" --server-username={{ .Values.ui.auth.username | quote }} --server-password="$KOPIA_UI_PASSWORD"
     {{- else }}
     set -- "$@" --without-password
+    # kopia refuses --without-password on a non-loopback bind unless this is
+    # passed. Its own help text: "exposes full repository and control API to
+    # the network without authentication which allows any external attacker to
+    # take full control of the server host (extremely dangerous)".
+    #
+    # Setting ui.auth.passwordKey is the only way to not need it.
+    set -- "$@" --allow-extremely-dangerous-unauthenticated-server-on-the-network
     {{- end }}
     {{- if .Values.ui.disableCSRFChecks }}
     set -- "$@" --disable-csrf-token-checks

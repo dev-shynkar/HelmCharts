@@ -194,12 +194,15 @@ read-only workload next to the CronJob. In `mode: server` it is the only
 workload and it is writable.
 
 **The UI has no password by default.** `kopia server` is started with
-`--without-password`, which means anyone who can reach it reads every file in
-every snapshot — and in `mode: server`, can delete snapshots too. There is no
-read-only account; kopia server has exactly one.
+`--without-password`, and because the server binds a non-loopback address over
+plain HTTP, kopia will not do that unless the chart also passes
+`--allow-extremely-dangerous-unauthenticated-server-on-the-network`. It does.
+Kopia's own description of that flag: it "exposes full repository and control
+API to the network without authentication which allows any external attacker to
+take full control of the server host".
 
 That is a reasonable default on a LAN with no Ingress. Behind an Ingress it is
-not. To turn authentication on:
+not, and setting a password is the only way to avoid the flag:
 
 ```sh
 kubectl create secret generic kopia-secret -n backups \
@@ -286,13 +289,19 @@ maintenance ownership.
 
 ### TLS
 
-`kopia server` refuses to listen on a non-loopback address without a
-certificate, so there are exactly two modes:
+The server always speaks plain HTTP inside the cluster — it has no certificate
+of its own, by design. Terminate TLS at the Ingress:
 
-| `ui.tls.mode` | What happens |
-| --- | --- |
-| `insecure` (default) | HTTP inside the cluster, `--insecure`, TLS terminated at the Ingress |
-| `existing` | mount `ui.tls.existingSecret` (`tls.crt` + `tls.key`) and serve HTTPS; the chart adds `nginx.ingress.kubernetes.io/backend-protocol: HTTPS` for you |
+```yaml
+ui:
+  ingress:
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt
+    tls:
+      - secretName: kopia-tls
+        hosts:
+          - kopia.home.lan
+```
 
 If the UI loads but every action fails behind your proxy, try
 `ui.disableCSRFChecks: true` — some reverse proxies break kopia's CSRF token.

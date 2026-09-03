@@ -162,11 +162,6 @@ spec:
               mountPath: /kopia-ssh
               readOnly: true
             {{- end }}
-            {{- if eq .Values.ui.tls.mode "existing" }}
-            - name: tls
-              mountPath: /kopia-tls
-              readOnly: true
-            {{- end }}
             {{- if eq .Values.mode "server" }}
             {{- range $src := .Values.sources }}
             - name: src-{{ $src.name }}
@@ -200,8 +195,7 @@ spec:
           {{- /*
             Deliberately TCP, not HTTP. The server answers 401 to an
             unauthenticated GET, which is proof it is alive but would fail an
-            httpGet probe - and with tls.mode "existing" the probe would also
-            have to know the scheme.
+            httpGet probe.
           */}}
           {{- if .Values.ui.startupProbe.enabled }}
           startupProbe:
@@ -251,12 +245,6 @@ spec:
               - key: {{ .Values.auth.keys.knownHosts }}
                 path: known_hosts
               {{- end }}
-        {{- end }}
-        {{- if eq .Values.ui.tls.mode "existing" }}
-        - name: tls
-          secret:
-            secretName: {{ .Values.ui.tls.existingSecret | quote }}
-            defaultMode: 0444
         {{- end }}
         {{- if eq .Values.mode "server" }}
         {{- /*

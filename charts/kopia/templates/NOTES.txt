@@ -20,7 +20,7 @@ Kopia {{ .Chart.AppVersion }} deployed as "{{ .Release.Name }}" in {{ .Values.mo
 {{- else }}
 
      kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "kopia.uiFullname" . }} 51515:{{ .Values.ui.service.port }}
-     # then http{{ if eq .Values.ui.tls.mode "existing" }}s{{ end }}://localhost:51515
+     # then http://localhost:51515
 {{- end }}
 
 {{- if .Values.repository.configureInUI }}
@@ -152,6 +152,12 @@ Kopia {{ .Chart.AppVersion }} deployed as "{{ .Release.Name }}" in {{ .Values.mo
 
    Anyone who can reach {{ if .Values.ui.ingress.enabled }}{{ range $i, $h := .Values.ui.ingress.hosts }}{{ if $i }}, {{ end }}{{ $h.host }}{{ end }}{{ else }}port {{ .Values.ui.service.port }}{{ end }} can read every file in every
    snapshot{{ if not (include "kopia.serverReadOnly" .) }}, and can delete snapshots and change what gets backed up{{ end }}.
+
+   kopia will not do this on a network address on its own, so the chart passes
+   --allow-extremely-dangerous-unauthenticated-server-on-the-network. Kopia
+   describes that as exposing "full repository and control API to the network
+   without authentication which allows any external attacker to take full
+   control of the server host". That is the flag you are running with.
 {{- if .Values.ui.ingress.enabled }}
 
    You have an Ingress, so this is reachable from wherever that Ingress is.

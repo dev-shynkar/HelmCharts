@@ -7,14 +7,6 @@ metadata:
     {{- include "kopia.labels" . | nindent 4 }}
     app.kubernetes.io/component: ui
   {{- $ann := merge (dict) (.Values.ui.ingress.annotations | default dict) (.Values.commonAnnotations | default dict) }}
-  {{- if eq .Values.ui.tls.mode "existing" }}
-  {{- /*
-    The backend speaks HTTPS with the certificate from ui.tls.existingSecret.
-    nginx assumes HTTP unless told otherwise, so set it here rather than
-    leaving a 502 to be debugged. Other controllers use their own annotation.
-  */}}
-  {{- $_ := set $ann "nginx.ingress.kubernetes.io/backend-protocol" "HTTPS" }}
-  {{- end }}
   {{- with $ann }}
   annotations:
     {{- toYaml . | nindent 4 }}

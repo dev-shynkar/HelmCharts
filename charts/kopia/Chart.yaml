@@ -3,7 +3,7 @@ name: kopia
 description: Kopia backup client - CronJob or writable server with web UI, snapshotting local paths to an SFTP repository
 type: application
 
-version: 0.9.0
+version: 0.10.0
 appVersion: "0.23.1"
 
 # 1.25 because the default values set `timeZone`, and CronJob.spec.timeZone is
@@ -29,6 +29,10 @@ annotations:
   artifacthub.io/category: storage
   artifacthub.io/license: Apache-2.0
   artifacthub.io/changes: |
+    - kind: removed
+      description: ui.tls is gone - the server always speaks plain HTTP inside the cluster and TLS terminates at the Ingress (ui.ingress.tls, unchanged). Removes the cert Secret mount, the backend-protocol annotation and two validations; a UI password is now the only way to avoid the allow-extremely-dangerous flag
+    - kind: fixed
+      description: A password-less UI could not start at all - kopia refuses --without-password on a non-loopback bind. The chart now passes --allow-extremely-dangerous-unauthenticated-server-on-the-network, and says plainly what that opens
     - kind: added
       description: repository.configureInUI starts the server with no repository so the backend, credentials and everything else are set up in the browser - kopia server opens its repository as optional, so the UI is served either way. sftp.* and auth.existingSecret become optional; the connection is persisted to the state volume so it survives restarts
     - kind: changed

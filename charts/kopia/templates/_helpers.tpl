@@ -550,7 +550,6 @@ Job at 03:00, or — worse — as a Job that succeeds while backing up nothing.
       "/scripts" "the generated scripts"
       "/tmp" "kopia's scratch space and log directory"
       "/kopia-ssh" "the SSH key and known_hosts"
-      "/kopia-tls" "the UI certificate"
 }}
 {{- range $i, $src := .Values.sources }}
 {{- $mp := include "kopia.sourceMountPath" (dict "src" $src) }}
@@ -696,16 +695,6 @@ Job at 03:00, or — worse — as a Job that succeeds while backing up nothing.
 {{- end }}
 
 {{- if include "kopia.serverEnabled" . }}
-{{- /*
-  kopia server refuses to listen on a non-loopback address without a
-  certificate, so one of the two has to be chosen deliberately.
-*/}}
-{{- if not (has .Values.ui.tls.mode (list "insecure" "existing")) }}
-{{- fail "ui.tls.mode must be \"insecure\" (plain HTTP inside the cluster, TLS terminated at the Ingress) or \"existing\" (mount a cert Secret)" }}
-{{- end }}
-{{- if and (eq .Values.ui.tls.mode "existing") (not .Values.ui.tls.existingSecret) }}
-{{- fail "ui.tls.existingSecret is required when ui.tls.mode is \"existing\": it must hold tls.crt and tls.key" }}
-{{- end }}
 {{- /*
   A writable server can delete snapshots. In server mode it must be writable -
   that is the whole point - so the acknowledgement is required either way.
