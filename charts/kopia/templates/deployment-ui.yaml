@@ -36,6 +36,17 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      {{- /*
+        Kopia derives a source identity from the machine it runs on. Left alone
+        that is the pod name, which is different after every restart - and with
+        repository.configureInUI there is no --override-hostname to correct it,
+        because the chart never runs a connect command. Every restart would
+        then file snapshots under a new source, and retention is per source, so
+        nothing would ever be pruned.
+
+        Setting spec.hostname makes os.Hostname() stable across restarts.
+      */}}
+      hostname: {{ include "kopia.identityHostname" . }}
       serviceAccountName: {{ include "kopia.serviceAccountName" . }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
 
@@ -105,6 +116,14 @@ spec:
               value: "false"
             - name: HOME
               value: "/tmp"
+            {{- /*
+              The image has no passwd entry for runAsUser and the binary is
+              built without cgo, so user.Current() fails - "Cannot determine
+              current user" in the log - and kopia falls back to a default
+              username. Same reasoning as hostname above.
+            */}}
+            - name: USER
+              value: {{ include "kopia.identityUsername" . | quote }}
             {{- if .Values.repository.configureInUI }}
             {{- /*
               The image sets this to false, which would throw away whatever you

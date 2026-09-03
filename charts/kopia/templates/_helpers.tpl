@@ -414,6 +414,9 @@ flag default.
 */}}
 - name: HOME
   value: "/tmp"
+{{- /* See the note on spec.hostname: user.Current() fails without cgo. */}}
+- name: USER
+  value: {{ include "kopia.identityUsername" . | quote }}
 - name: KOPIA_PASSWORD
   valueFrom:
     secretKeyRef:
@@ -687,6 +690,19 @@ Job at 03:00, or — worse — as a Job that succeeds while backing up nothing.
 {{- if contains $ch ($val | toString) }}
 {{- fail (printf "%s contains %q, which the shell would expand inside the generated script - kopia would receive a different value than you set. Rename the path." $key $ch) }}
 {{- end }}
+{{- end }}
+{{- end }}
+
+{{- /*
+  identity.hostname is also used as the pod's spec.hostname, so it has to be a
+  DNS-1123 label. The default (the release fullname) always is.
+*/}}
+{{- with .Values.identity.hostname }}
+{{- if not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" .) }}
+{{- fail (printf "identity.hostname %q must be a lowercase DNS label (letters, digits, dashes): the chart sets it as the pod hostname so kopia's machine identity survives restarts" .) }}
+{{- end }}
+{{- if gt (len .) 63 }}
+{{- fail "identity.hostname must be 63 characters or fewer: it is used as the pod hostname" }}
 {{- end }}
 {{- end }}
 

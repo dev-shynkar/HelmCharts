@@ -93,6 +93,8 @@ spec:
                   value: "false"
                 - name: HOME
                   value: /tmp
+                - name: USER
+                  value: {{ include "kopia.identityUsername" . | quote }}
                 - name: KOPIA_PASSWORD
                   valueFrom:
                     secretKeyRef:

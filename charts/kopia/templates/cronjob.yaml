@@ -75,6 +75,8 @@ spec:
           {{- end }}
         spec:
           restartPolicy: Never
+          {{- /* Stable machine identity - see deployment-ui.yaml. */}}
+          hostname: {{ include "kopia.identityHostname" . }}
           serviceAccountName: {{ include "kopia.serviceAccountName" . }}
           automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
           terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
