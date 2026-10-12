@@ -1,0 +1,24 @@
+tapo-exporter is running with {{ len (keys .Values.devices) }} device group(s).
+
+Check it:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "tapo-exporter.fullname" . }} {{ .Values.service.port }}
+  curl -s localhost:{{ .Values.service.port }}/metrics | grep '^tapo_'
+
+Prometheus:
+{{- if .Values.service.annotations }}
+  * In-cluster Prometheus with annotation-based discovery (kubernetes-service-endpoints job)
+    picks the Service up automatically (prometheus.io/scrape=true).
+{{- end }}
+  * Or scrape it as a static target:
+      scrape_configs:
+        - job_name: tapo
+          scrape_interval: 30s
+          scrape_timeout: 10s
+          static_configs:
+{{- if eq .Values.service.type "NodePort" }}
+            - targets: ['<node-ip>:{{ .Values.service.nodePort | default "<nodePort>" }}']
+{{- else }}
+            - targets: ['{{ include "tapo-exporter.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}']
+{{- end }}
+  * Alert rules: add alerts.yml from the repo to your Prometheus rule_files.
+  * Grafana: import grafana-dashboard.json from the repo.

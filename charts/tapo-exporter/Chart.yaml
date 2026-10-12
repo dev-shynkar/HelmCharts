@@ -1,0 +1,12 @@
+apiVersion: v2
+name: tapo-exporter
+description: Prometheus exporter for TP-Link Tapo P110/P115 smart plugs (voltage, current, power, availability).
+type: application
+version: 0.1.0
+appVersion: "sha-f09d61b"
+keywords:
+  - prometheus
+  - exporter
+  - tapo
+  - p110
+  - p115

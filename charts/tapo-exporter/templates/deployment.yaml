@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tapo-exporter.fullname" . }}
+  labels:
+    {{- include "tapo-exporter.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  # Recreate: never run two exporters (two sessions per plug, duplicate series) during an upgrade.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "tapo-exporter.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # The exporter reads devices and credentials only at start: restart the pod when they change.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if not .Values.credentials.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "tapo-exporter.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # The exporter never talks to the Kubernetes API.
+      automountServiceAccountToken: false
+      # Don't inject <SERVICE>_PORT=... variables; they could collide with TAPO_* settings.
+      enableServiceLinks: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: exporter
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: TAPO_EMAIL_FILE
+              value: /etc/tapo/secret/{{ .Values.credentials.emailKey }}
+            - name: TAPO_PASSWORD_FILE
+              value: /etc/tapo/secret/{{ .Values.credentials.passwordKey }}
+            - name: TAPO_DEVICES_FILE
+              value: /etc/tapo/config/devices.yml
+            - name: TAPO_LISTEN
+              value: ":{{ .Values.exporter.port }}"
+            - name: TAPO_TIMEOUT
+              value: {{ .Values.exporter.timeout | quote }}
+            - name: TAPO_CACHE_TTL
+              value: {{ .Values.exporter.cacheTTL | quote }}
+            - name: TZ
+              value: {{ .Values.exporter.timezone | quote }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.exporter.port }}
+              protocol: TCP
+          # /healthz never contacts the plugs, so an offline plug doesn't restart the pod.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            periodSeconds: 30
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            periodSeconds: 10
+            timeoutSeconds: 3
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: secret
+              mountPath: /etc/tapo/secret
+              readOnly: true
+            - name: config
+              mountPath: /etc/tapo/config
+              readOnly: true
+      volumes:
+        - name: secret
+          secret:
+            secretName: {{ include "tapo-exporter.secretName" . }}
+            # 0440 + fsGroup: readable by the non-root exporter, not by others.
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.credentials.emailKey }}
+                path: {{ .Values.credentials.emailKey }}
+              - key: {{ .Values.credentials.passwordKey }}
+                path: {{ .Values.credentials.passwordKey }}
+        - name: config
+          configMap:
+            name: {{ include "tapo-exporter.fullname" . }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

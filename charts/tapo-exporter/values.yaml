@@ -1,0 +1,94 @@
+# -- Container image. Build it with the Dockerfile in the repo root and push to your registry.
+image:
+  repository: "ghcr.io/dev-shynkar/tapo-exporter"            # required, e.g. registry.example.com/tapo-exporter
+  tag: ""                   # defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# -- Tapo account credentials (the same as in the Tapo app).
+credentials:
+  # Use an existing Secret instead of putting credentials in values (recommended).
+  existingSecret: ""
+  emailKey: email
+  passwordKey: password
+  # Only used when existingSecret is empty. Prefer --set-file / a private values file; never commit them.
+  email: ""
+  password: ""
+
+# -- Devices: group -> device name -> IP (or IP:port). Names must be unique across groups.
+# Keep it empty here: Helm MERGES maps, so defaults would stay next to your own devices.
+# Quote names that YAML treats as booleans ("on", "off", "yes", "no").
+# Example:
+#   devices:
+#     home:
+#       kitchen: 192.168.1.50
+#       boiler: 192.168.1.51
+#     work:
+#       office: 10.0.0.20
+devices: {}
+
+exporter:
+  # -- Per-device timeout. Keep Prometheus scrape_timeout above it (default 10s is fine).
+  timeout: 5s
+  # -- Reuse readings younger than this. Set e.g. 10s when several Prometheus servers scrape
+  # the exporter, so each plug is polled once per interval. 0s disables.
+  cacheTTL: 0s
+  timezone: Europe/Kyiv
+  port: 9333
+
+# -- Exactly one replica: every replica keeps its own session with every plug and polls it
+# on each scrape. Plugs are small devices; more clients mean more load and re-handshakes.
+replicaCount: 1
+
+service:
+  type: ClusterIP           # NodePort if Prometheus runs outside the cluster
+  port: 9333
+  nodePort: null            # fixed port for type NodePort, e.g. 30933
+  # Annotation-based discovery used by plain Prometheus (kubernetes_sd "kubernetes-service-endpoints"
+  # job, e.g. in the prometheus-community/prometheus chart). Set to {} if you scrape a static target.
+  # Do NOT also annotate the pod, or Prometheus scrapes the exporter twice.
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9333"
+    prometheus.io/path: /metrics
+
+podAnnotations: {}
+podLabels: {}
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    memory: 64Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532            # lets the non-root process read the mounted Secret files
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+# -- Restrict traffic. Only enable if your CNI enforces NetworkPolicy.
+networkPolicy:
+  enabled: false
+  # Who may scrape /metrics. Empty = any pod in any namespace.
+  ingressFrom: []
+  #  - namespaceSelector:
+  #      matchLabels:
+  #        kubernetes.io/metadata.name: monitoring
+  # CIDRs the exporter may reach on port 80 (your plugs). DNS to kube-system is always allowed.
+  egressCIDRs:
+    - 192.168.0.0/16
+    - 10.0.0.0/8
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

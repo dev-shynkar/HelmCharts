@@ -1,0 +1,10 @@
+# Never package local/secret values into the chart archive.
+# (Helm's ignore rules don't support "!" negation; "values-*.yaml" doesn't match values.yaml.)
+*.tgz
+values-*.yaml
+secrets*
+.env*
+.git/
+.vscode/
+.idea/
+*.swp
