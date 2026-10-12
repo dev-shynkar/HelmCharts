@@ -35,9 +35,9 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 2.3.0.4
-    created: "2026-09-03T11:06:50.759887777Z"
+    created: "2026-10-12T17:06:16.907137185Z"
     description: Duplicati backup client - official duplicati/duplicati image
-    digest: 39480bd374ad411a9135d2da29c3f9fc13f4a6b2c13cf3b4116460f56f875625
+    digest: 2b8eaf4bb77f5eb5652d7b6110558653be0f59189066f9165443564b1c28ac2f
     home: https://duplicati.com/
     icon: https://raw.githubusercontent.com/dev-shynkar/HelmCharts/master/Duplicati/images/duplicati-logo.png
     keywords:
@@ -81,9 +81,9 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 1.6.0
-    created: "2026-09-03T11:06:50.760821717Z"
+    created: "2026-10-12T17:06:16.908362634Z"
     description: Prometheus exporter for EcoFlow devices (remote mode)
-    digest: b61385c3dfda7d41a7903fe342d0f094e8dc0ebc5aceb29bc192482787c169c9
+    digest: 7f0c74d5a110483a749698e9a83743ddf6e015b5178c451f93387a40ad6e7599
     home: https://github.com/tess1o/go-ecoflow-exporter
     icon: https://raw.githubusercontent.com/tess1o/go-ecoflow-exporter/main/docs/images/dashboard.png
     keywords:
@@ -149,10 +149,10 @@ entries:
       artifacthub.io/license: Apache-2.0
     apiVersion: v2
     appVersion: 0.23.1
-    created: "2026-09-03T11:06:50.763036181Z"
+    created: "2026-10-12T17:06:16.91105865Z"
     description: Kopia backup client - CronJob or writable server with web UI, snapshotting
       local paths to an SFTP repository
-    digest: 7a6d923aba2b5d35a014c48512636822786a7a25c563c162e48c2c2338b424d7
+    digest: 9cf8d1ecc7fe37666fc0f8ed02cb77d276ae70eca7f2b0b0fef4cfe374b48ae3
     home: https://kopia.io/
     keywords:
     - kopia
@@ -192,9 +192,9 @@ entries:
       artifacthub.io/license: BSD-2-Clause
     apiVersion: v2
     appVersion: 1.21.2
-    created: "2026-09-03T11:06:50.763998514Z"
+    created: "2026-10-12T17:06:16.912014805Z"
     description: Helm chart for Pingvin Share X — a self-hosted file sharing platform
-    digest: 08659bc93ce90e0f04f3739a72c19395202265e8d82521b956f761bf15b48969
+    digest: 58c1f5b6d780e2e13cb4de5806fafda86b560bb8201afb28623480e3beded5fc
     home: https://github.com/smp46/pingvin-share-x
     icon: https://raw.githubusercontent.com/smp46/pingvin-share-x/main/frontend/public/img/logo.png
     keywords:
@@ -213,14 +213,32 @@ entries:
   samba:
   - apiVersion: v2
     appVersion: 4.21.4
-    created: "2026-09-03T11:06:50.76440438Z"
+    created: "2026-10-12T17:06:16.912446311Z"
     description: Helm chart for Samba SMB server using crazymax/samba
-    digest: 3dec0a82cd7440f6157ed299df58980e488a26d99096e76be547901645bac73a
+    digest: 481397156c2e2e7d7c96d43346184d1856d2a741e13faa5893cd7f4e3a810368
     name: samba
     type: application
     urls:
     - https://dev-shynkar.github.io/HelmCharts/samba-0.3.0.tgz
     version: 0.3.0
+  tapo-exporter:
+  - apiVersion: v2
+    appVersion: sha-f09d61b
+    created: "2026-10-12T17:06:16.912876926Z"
+    description: Prometheus exporter for TP-Link Tapo P110/P115 smart plugs (voltage,
+      current, power, availability).
+    digest: 7f8d5278b1b0633247e500287fa8f4629503fd8906ca8ecdff684d014cf0f89f
+    keywords:
+    - prometheus
+    - exporter
+    - tapo
+    - p110
+    - p115
+    name: tapo-exporter
+    type: application
+    urls:
+    - https://dev-shynkar.github.io/HelmCharts/tapo-exporter-0.1.0.tgz
+    version: 0.1.0
   transmission:
   - annotations:
       artifacthub.io/category: networking
@@ -256,9 +274,9 @@ entries:
       artifacthub.io/license: GPL-2.0-or-later
     apiVersion: v2
     appVersion: 4.1.3
-    created: "2026-09-03T11:06:50.765597141Z"
+    created: "2026-10-12T17:06:16.914097115Z"
     description: Transmission torrent client - linuxserver.io image
-    digest: 25ca76a37d11028c93e54feb7a8c2392ea357e22b9b041cacaa961614ebd7cdd
+    digest: 352eeb25d39c505343db5abf7395c4ef38253ce1a976fdb950d3fb236d671c53
     home: https://github.com/linuxserver/docker-transmission
     icon: https://raw.githubusercontent.com/linuxserver/docker-templates/master/linuxserver.io/img/transmission-icon.png
     keywords:
@@ -276,4 +294,4 @@ entries:
     urls:
     - https://dev-shynkar.github.io/HelmCharts/transmission-0.6.0.tgz
     version: 0.6.0
-generated: "2026-09-03T11:06:50.756933115Z"
+generated: "2026-10-12T17:06:16.905624079Z"
